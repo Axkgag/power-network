@@ -45,19 +45,15 @@ from .lib.utils import (
 
 from riemann_interface.defaults import Status, TrainStatus, AbstractSender, AbstractObjectDetectTrainer
 
-def createInstance(sender):
-    trainer = YoloxTrainer(sender)
-    return trainer
-
 class YoloxTrainer(AbstractObjectDetectTrainer):
-    def __init__(self, sender: AbstractSender):
+    def __init__(self, sender: AbstractSender, config_name: str):
         super().__init__(sender)
+        self.config_name = config_name 
 
     def setupInfo(self, train_dir: str) -> bool:
         self.exp = Exp()
-        self.args = TrainArgs()
 
-        trainer_config_path = os.path.join(train_dir, "trainer.json")
+        trainer_config_path = os.path.join(train_dir, self.config_name)
         with open(trainer_config_path, 'r', encoding='utf-8') as f:
             train_config = json.load(f)
 
@@ -69,79 +65,69 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                     logger.error("{} is not in config".format(key))
                     return False
 
-            self.train_config = train_config
-            train_anno_path = os.path.join(train_dir, "annotations.json")
-            train_img_path = os.path.join(train_dir, "image")
-            val_anno_path = os.path.join(train_dir, "val_annotations.json")
-            val_img_path = os.path.join(train_dir, "val")
+            self.config = train_config
+            train_anno_path = os.path.join(train_dir, self.config["train_anno"])
+            train_img_path = os.path.join(train_dir, self.config["train_img"])
+            val_anno_path = os.path.join(train_dir, self.config["val_anno"])
+            val_img_path = os.path.join(train_dir, self.config["val_img"])
 
             self.exp.data_dir = train_dir
-            self.args.name = train_config["arch"]
-            if self.args.name not in pretrain_model:
-                logger.error("'{}' model does not exist".format(self.args.name))
+            self.arch = self.config["arch"]
+            if self.arch not in pretrain_model:
+                logger.error("'{}' model does not exist".format(self.arch))
                 return False
-            self.exp.depth, self.exp.width = pretrain_model[self.args.name]
-            self.args.ckpt = "./weights/{}.pth".format(self.args.name)
-            self.args.batch_size = train_config["batch_size"]
-            self.args.devices = train_config["gpus"]
-            self.args.patch_train = train_config["patch_train"]
+            self.exp.depth, self.exp.width = pretrain_model[self.arch]
+            self.ckpt_model = "./weights/{}.pth".format(self.train_config["ckpt_model"])
+            self.batch_size = self.config["batch_size"]
+            self.devices = int(self.config["gpus"])
+            self.patch_train = self.config["patch_train"]
 
-            self.exp.nmsthre = train_config["iou_thr"]
-            self.exp.num_classes = train_config["num_classes"]
-            self.exp.input_size = tuple(train_config["input_res"])
-            self.exp.test_conf = train_config["score_threshold"]
-            self.exp.max_epoch = train_config["num_epochs"]
-            self.exp.data_num_workers = train_config["num_workers"]
-            self.exp.eval_interval = train_config["val_intervals"]
-            self.export_dir = train_config["export_dir"]
+            self.fp16 = False
+            self.cache = False
+            self.occupy = False
+            self.dynamic = False
+            self.decode_in_inference = False
+            self.no_onnxsim = False
 
-            if train_config["patch_train"]:
-                self.crop_w = train_config["crop_w"]
-                self.crop_h = train_config["crop_h"]
-                self.stride_x = train_config["stride_x"]
-                self.stride_y = train_config["stride_y"]
+            self.exp.nmsthre = self.config["iou_thr"]
+            self.exp.num_classes = self.config["num_classes"]
+            self.exp.input_size = tuple(self.config["input_res"])
+            self.exp.test_conf = self.config["score_threshold"]
+            self.exp.max_epoch = self.config["num_epochs"]
+            self.exp.data_num_workers = self.config["num_workers"]
+            self.exp.eval_interval = self.config["val_intervals"]
+            self.export_dir = self.config["export_dir"]
 
-                crop_train_img_path = os.path.join(train_dir, "crop_image")
-                crop_train_anno_path = os.path.join(train_dir, "crop_annotations.json")
+            if self.config["patch_train"]:
+                self.crop_w = self.config["crop_w"]
+                self.crop_h = self.config["crop_h"]
+                self.stride_x = self.config["stride_x"]
+                self.stride_y = self.config["stride_y"]
+
+                crop_train_img_path = os.path.join(train_dir, "crop_" + self.config["train_img"])
+                crop_train_anno_path = os.path.join(train_dir, "crop_" + self.config["train_anno"])
                 if not os.path.exists(crop_train_img_path) or not os.path.exists(crop_train_anno_path):
                     self.setupDataset(train_anno_path, train_img_path, crop_train_img_path, crop_train_anno_path)
-                self.exp.train_ann = "crop_annotations.json"
-                self.exp.train_img = "crop_image"
+                self.exp.train_ann = "crop_" + self.config["train_anno"]
+                self.exp.train_img = "crop_" + self.config["train_img"]
 
                 if self.exp.eval_interval > 0:
-                    crop_val_img_path = os.path.join(train_dir, "crop_val")
-                    crop_val_anno_path = os.path.join(train_dir, "crop_val_annotations.json")
+                    crop_val_img_path = os.path.join(train_dir, "crop_" + self.config["val_img"])
+                    crop_val_anno_path = os.path.join(train_dir, "crop_" + self.config["val_anno"])
                     if not os.path.exists(crop_val_img_path) or not os.path.exists(crop_val_anno_path):
                         self.setupDataset(val_anno_path, val_img_path, crop_val_img_path, crop_val_anno_path)
-                    self.exp.val_ann = "crop_val_annotations.json"
-                    self.exp.val_img = "crop_val"
+                    self.exp.val_ann = "crop_" + self.config["val_anno"]
+                    self.exp.val_img = "crop_" + self.config["val_img"]
 
-            if ("val_dir" in train_config) and (train_config["val_dir"] != ""):
-                self.val_dir = train_config["val_dir"]
-            else:
-                self.val_dir = ""
-            if ("test_dir" in train_config) and (train_config["test_dir"] != ""):
-                self.test_dir = train_config["test_dir"]
-            else:
-                self.test_dir = ""
-
-        self.max_epoch = self.exp.max_epoch
-        # self.start_epoch = self.args.start_epoch
-        self.end_epoch = self.max_epoch
         self.epoch = 0
-        self.amp_training = self.args.fp16
-        self.scaler = torch.cuda.amp.GradScaler(enabled=self.args.fp16)
+        self.scaler = torch.cuda.amp.GradScaler(enabled=self.fp16)
         self.is_distributed = get_world_size() > 1
         self.rank = get_rank()
         self.local_rank = get_local_rank()
-        # print("rank: ", self.rank)
-        # print("local_rank: ", self.local_rank)
-        # self.device = "cuda:{}".format(self.local_rank)
-        self.device = "cpu" if self.args.devices == -1 else "cuda:{}".format(self.args.devices)
+        self.device = "cpu" if self.args.devices == -1 else "cuda:{}".format(self.devices)
         self.use_model_ema = self.exp.ema
-        self.save_history_ckpt = self.exp.save_history_ckpt
 
-        self.data_type = torch.float16 if self.args.fp16 else torch.float32
+        self.data_type = torch.float16 if self.fp16 else torch.float32
         self.input_size = self.exp.input_size
         self.best_ap = 0
 
@@ -157,12 +143,6 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         handler = logging.FileHandler(self.cache_dir + "/train_log.txt")
         logger.addHandler(handler)
 
-        # setup_logger(
-        #     self.exp.output_dir,
-        #     distributed_rank=self.rank,
-        #     filename="train_log.txt",
-        #     mode='a',
-        # )
         return True
 
     def setupTrain(self, train_dir: str, is_resume: bool = False) -> Status:
@@ -178,7 +158,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
         # logger.info("args: {}".format(self.args))
         # logger.info("exp value:\n{}".format(self.exp))
-        if self.args.devices != -1:
+        if self.devices != -1:
             torch.cuda.set_device(self.args.devices)
         model = self.exp.get_model()
         # logger.info(
@@ -190,23 +170,23 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
         model = self.resume_train(model)
 
-        self.no_aug = self.start_epoch >= self.max_epoch - self.exp.no_aug_epochs
+        self.no_aug = self.start_epoch >= self.exp.max_epoch - self.exp.no_aug_epochs
         # self.no_aug = True
         
         self.train_loader = self.exp.get_data_loader(
             batch_size=self.args.batch_size,
             is_distributed=self.is_distributed,
             no_aug=self.no_aug,
-            cache_img=self.args.cache
+            cache_img=self.cache
         )
         logger.info("init prefetcher, this might take one minute or less...")
         self.prefetcher = DataPrefetcher(self.train_loader)
         self.max_iter = len(self.train_loader)
 
         self.lr_scheduler = self.exp.get_lr_scheduler(
-            self.exp.basic_lr_per_img * self.args.batch_size, self.max_iter
+            self.exp.basic_lr_per_img * self.batch_size, self.max_iter
         )
-        if self.args.occupy:
+        if self.occupy:
             occupy_mem(5)
 
         if self.is_distributed:
@@ -220,20 +200,8 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
         if self.exp.eval_interval > 0:
             self.evaluator = self.exp.get_evaluator(
-                batch_size=self.args.batch_size, is_distributed=self.is_distributed
+                batch_size=self.batch_size, is_distributed=self.is_distributed
             )
-
-        # if self.rank == 0:
-        #     if self.args.logger == "tensorboard":
-        #         self.tblogger = SummaryWriter(os.path.join(self.cache_dir, "tensorboard"))
-        #     # elif self.args.logger == "wandb":
-        #     #     self.wandb_logger = WandbLogger.initialize_wandb_logger(
-        #     #         self.args,
-        #     #         self.exp,
-        #     #         self.evaluator.dataloader.dataset
-        #     #     )
-        #     else:
-        #         raise ValueError("logger must be either 'tensorboard'")
 
         logger.info("Training start...")
         # logger.info("\n{}".format(model))
@@ -251,7 +219,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         logger.info("---> start train epoch{}".format(self.epoch + 1))
 
         # if epoch + 1 == self.max_epoch - self.exp.no_aug_epochs or self.no_aug:
-        if epoch + 1 == self.max_epoch - self.exp.no_aug_epochs or self.no_aug:
+        if epoch + 1 == self.exp.max_epoch - self.exp.no_aug_epochs or self.no_aug:
             # logger.info("--->No mosaic aug now!")
             # self.train_loader.close_mosaic()
             logger.info("--->Add additional L1 loss now!")
@@ -277,7 +245,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             inps, targets = self.exp.preprocess(inps, targets, self.input_size)
             data_end_time = time.time()
 
-            with torch.cuda.amp.autocast(enabled=self.amp_training):
+            with torch.cuda.amp.autocast(enabled=self.fp16):
                 outputs = self.model(inps, targets)
 
             loss = outputs["total_loss"]
@@ -306,12 +274,12 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             # 2.3 after_iter
             if (self.iter + 1) % self.exp.print_interval == 0:
                 # TODO check ETA logic
-                left_iters = self.max_iter * self.max_epoch - (self.progress_in_iter + 1)
+                left_iters = self.max_iter * self.exp.max_epoch - (self.progress_in_iter + 1)
                 eta_seconds = self.meter["iter_time"].global_avg * left_iters
                 eta_str = "ETA: {}".format(datetime.timedelta(seconds=int(eta_seconds)))
 
                 progress_str = "epoch: {}/{}, iter: {}/{}".format(
-                    self.epoch + 1, self.max_epoch, self.iter + 1, self.max_iter
+                    self.epoch + 1, self.exp.max_epoch, self.iter + 1, self.max_iter
                 )
                 loss_meter = self.meter.get_filtered_meter("loss")
                 loss_str = ", ".join(
@@ -333,14 +301,6 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                     )
                     + (", size: {:d}, {}".format(self.input_size[0], eta_str))
                 )
-
-                # if self.rank == 0:
-                #     if self.args.logger == "wandb":
-                #         metrics = {"train/" + k: v.latest for k, v in loss_meter.items()}
-                #         metrics.update({
-                #             "train/lr": self.meter["lr"].latest
-                #         })
-                #         self.wandb_logger.log_metrics(metrics, step=self.progress_in_iter)
 
                 self.meter.clear_meters()
 
@@ -392,21 +352,11 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         self.best_ap = max(self.best_ap, ap50_95)
 
         if self.rank == 0:
-            # if self.args.logger == "tensorboard":
-            #     self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)
-            #     self.tblogger.add_scalar("val/COCOAP50_95", ap50_95, self.epoch + 1)
-            # if self.args.logger == "wandb":
-            #     self.wandb_logger.log_metrics({
-            #         "val/COCOAP50": ap50,
-            #         "val/COCOAP50_95": ap50_95,
-            #         "train/epoch": self.epoch + 1,
-            #     })
-            #     self.wandb_logger.log_images(predictions)
             logger.info("\n" + summary)
         synchronize()
 
         self.save_ckpt("last_epoch", update_best_ckpt, ap=ap50_95)
-        if self.save_history_ckpt:
+        if self.exp.save_history_ckpt:
             self.save_ckpt(f"epoch_{self.epoch + 1}", ap=ap50_95)
 
         return ap50_95
@@ -434,18 +384,6 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                 ckpt_name,
             )
 
-            # if self.args.logger == "wandb":
-            #     self.wandb_logger.save_checkpoint(
-            #         self.cache_dir,
-            #         ckpt_name,
-            #         update_best_ckpt,
-            #         metadata={
-            #             "epoch": self.epoch + 1,
-            #             "optimizer": self.optimizer.state_dict(),
-            #             "best_ap": self.best_ap,
-            #             "curr_ap": ap
-            #         }
-            #     )
 
     def save_results(self, predictions, save_dir):
         results = []
@@ -528,11 +466,11 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         logger.info("\n" + summary)
         self.save_results(predictions, save_dir)
 
-        import pycocotools.coco as coco
-        from utils.riemann_coco_eval import actualGetAP
-        coco_anno = coco.COCO(os.path.join(self.exp.data_dir, self.exp.train_ann))
-        coco_dets = coco_anno.loadRes(os.path.join(save_dir, "report", "train_results.json"))
-        stat = actualGetAP(gt_anno=coco_anno, dets_anno=coco_dets, iou_type="bbox")
+        # import pycocotools.coco as coco
+        # from utils.riemann_coco_eval import actualGetAP
+        # coco_anno = coco.COCO(os.path.join(self.exp.data_dir, self.exp.train_ann))
+        # coco_dets = coco_anno.loadRes(os.path.join(save_dir, "report", "train_results.json"))
+        # stat = actualGetAP(gt_anno=coco_anno, dets_anno=coco_dets, iou_type="bbox")
 
         # stat["ap50_90"] = ap50_95
         # stat["ap50"] = ap50
@@ -540,10 +478,6 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
     def exportModel(self, export_path: str) -> bool:
         self.save_ckpt(ckpt_name="latest", export_dir=export_path)
-        # status = self.testTrainDataset(export_path, "train")
-        # status["task_type"] = "object_detection"
-        # print(status)
-        # self.sender.send(method="train_result", data=status)
 
         status = []
         datasets = []
@@ -561,7 +495,6 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         results = {"stats": status, "datasets": datasets, "task_type": "ObjectDetection"}
         self.sender.send(method="train_result", data=results)
 
-        # self.exportOnnx(export_path, export_path)
         with open(os.path.join(export_path, "predictor.json"), "w", encoding='utf-8') as pf:
             pred_json = {
                 "arch": self.train_config["arch"],
@@ -571,7 +504,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                 "iou_thr": self.train_config["iou_thr"],
                 "num_classes": self.train_config["num_classes"],
                 "fp16": False,
-                "gpus": "0",
+                "gpus": self.train_config["gpus"],
             }
             if self.train_config["patch_train"]:
                 pred_json["crop_w"] = self.train_config["crop_w"]

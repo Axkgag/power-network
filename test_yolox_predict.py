@@ -10,10 +10,10 @@ from utils.riemann_coco_eval import getAPForRes
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model_dir',
-                    default=r'D:\task\ChipCounter\data\chip\23-02-06\yolox\no_patch',
+                    default="",
                     help='model_dir, dir of model to be loaded')
 parser.add_argument('-t', '--test_dir',
-                    default=r'D:\task\ChipCounter\data\chip\23-02-06\yolox\no_patch\test',
+                    default="",
                     help='test_dir, dir of dataset be tested')
 parser.add_argument('-s', '--save_result',
                     default=False,
@@ -55,14 +55,9 @@ if __name__ == "__main__":
                 origin_filename = os.path.join(test_dir, "annotations.json")
                 with open(result_filename, 'w') as jf:
                     json.dump(outputs, jf, indent=4)
-                result = getAPForRes(result_filename, origin_filename, "bbox")
-                print("result:", result)
-            print("mTime:", T / len(files) * 1000)
+                if os.path.exists(origin_filename):
+                    result = getAPForRes(result_filename, origin_filename, "bbox")
+                    print("result:", result)
+            logging.info("mTime: {}".format(T / len(files) * 1000))
         else:
             logging.error("image path {} is not dir !".format(img_path))
-    
-        # predictor.run_eval(
-        #     os.path.join(test_dir, "val"),
-        #     os.path.join(test_dir, "val_annotations.json"),
-        #     test_dir
-        # )

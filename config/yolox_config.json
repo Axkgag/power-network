@@ -1,0 +1,42 @@
+{
+    "arch": "yolox_l",
+    "ckpt_model": "yolox_l",
+    "batch_size": 16,
+    "class_names": [
+        "010101021",
+        "010101031",
+        "010101061",
+        "010101071",
+        "010201041",
+        "010202021",
+        "010301021",
+        "010301011",
+        "010301031",
+        "010401041",
+        "010401051",
+        "010401061",
+        "050101041",
+        "060101051"
+    ],
+    "input_res": [
+        640,
+        640
+    ],
+    "export_dir": "/data/gauss/lyh/datasets/power_networks/yolox/export/",
+    "gpus": "2",
+    "num_classes": 14,
+    "num_epochs": 20,
+    "num_workers": 0,
+    "score_threshold":0.3,
+    "iou_thr":0.4,
+    "val_intervals": 5,
+    "train_img": "image",
+    "train_anno": "annotations.json",
+    "val_img": "val_img",
+    "val_anno": "val_annotations.json",
+    "patch_train": 1, 
+    "crop_w": 0,
+    "crop_h": 0,
+    "stride_x": 0,
+    "stride_y": 0
+}
