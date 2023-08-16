@@ -1,0 +1,38 @@
+字段 类型 说明
+img_dir str 图片目录
+
+train_annot_path str 训练标签路径
+
+test_annot_path str 测试标签路径
+
+export_dir str 实验结果输出目录
+
+class_names list[str, str, ...] 类别名称，以list形式
+
+num_classes int  类别个数
+
+input_res list[int, int] 图像输入尺寸
+
+task str 任务id：这里只支持'ctdet'
+
+exp_id str 实验任务名：每次实验应都取一个新的
+
+load_model str 预训练模型的路径
+
+resume bool 是否从最新的checkpoint开始训练
+
+gpus str '-1' for cpu, '0, 1' for id 0 and id 1 gpus
+
+num_workers int 
+
+arch str 网络架构 dla_34| res_18 | res_101 | resdcn_18 | resdcn_101 |dlav0_34 |  hourglass
+
+lr float
+
+lr_step str '90, 120'
+
+num_epochs int 
+
+batch_size int
+
+score_threshold [0.5,0.5] 检测任务得分阈值

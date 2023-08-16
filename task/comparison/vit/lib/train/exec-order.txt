@@ -1,0 +1,6 @@
+修改 confing.json后 运行
+1. 裁剪图片 python crop.py
+2. 训练 python main_for_focal.py
+3. 测试 python test_for_focal.py
+4. 去除bn python merge_conv_bn.py
+5.  测试去除bn后模型 python test_after_merge.py

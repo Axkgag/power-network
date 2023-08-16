@@ -1,0 +1,102 @@
+# cython: language_level=3
+import torch
+import torch.nn as nn
+from torchvision import transforms
+from torch.nn import functional as F
+from PIL import Image
+import numpy as np
+import time
+import os
+import csv
+import json
+
+from .aug import maker_border_resize
+from ..networks_for_focal import EfficientNet
+import copy
+
+np.random.seed(666)
+
+
+# def get_model(weights_name=None, cuda=True, model_name="cls18", num_classes=2):
+#     model = SiameseNet(model_name, num_classes)
+#     if weights_name is not None:
+#         if cuda:
+#             state_dict = torch.load(weights_name)
+#             model.load_state_dict(state_dict)
+#             model.cuda()
+#         else:
+#             state_dict = torch.load(weights_name, map_location=torch.device('cpu'))
+#             model.load_state_dict(state_dict)
+#     return model
+
+def testData(model, test_file, print_prefix, save_file, num_classes, img_dir):
+    total_confusion_matrix = np.zeros((num_classes + 1, num_classes + 1), dtype=np.float32)  # 总的混淆矩阵
+    with torch.no_grad():
+        model.eval()
+        test_data = np.loadtxt(test_file, dtype=str, encoding='utf-8', comments=';')
+        img_paths = test_data[:, 0]
+        labels = test_data[:, 1]
+        with open(save_file, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            writer.writerow(['pos', 'img', 'img_name', 'target', 'prediction'])
+            for i, img_path in enumerate(img_paths):
+                print(str(i) + '\r', end="")
+                pos = img_path.split('#')[-1].replace('.jpg', '')
+                img2 = Image.open(os.path.join(img_dir, img_path)).convert("RGB")
+                img2 = maker_border_resize(np.asarray(img2), 256)
+                img2 = Image.fromarray(img2)
+                img2 = transform(img2)
+                img2 = img2.unsqueeze(0)
+                if cuda:
+                    img2 = img2.cuda()
+                scores = model(img2)[0]
+                scores = scores.cpu().detach().numpy()
+                pred_cls = np.argmax(scores)
+
+                total_confusion_matrix[int(labels[i]), int(pred_cls)] += 1
+                writer.writerow([pos, img_path, os.path.basename(img_path), labels[i], pred_cls])
+    total_confusion_matrix[:num_classes, num_classes] = np.diagonal(
+        total_confusion_matrix[0:num_classes, 0:num_classes]) / np.sum(
+        total_confusion_matrix[0:num_classes, 0:num_classes], axis=1)
+    total_confusion_matrix[num_classes, :num_classes] = np.diagonal(
+        total_confusion_matrix[0:num_classes, 0:num_classes]) / np.sum(
+        total_confusion_matrix[0:num_classes, 0:num_classes], axis=0)
+    total_confusion_matrix[num_classes, num_classes] = np.sum(
+        np.diagonal(total_confusion_matrix[0:num_classes, 0:num_classes])) / np.sum(
+        total_confusion_matrix[0:num_classes, 0:num_classes])
+    return total_confusion_matrix
+
+
+def testAfterTrain(config):
+    global cuda, transform
+    print("begin test no bn")
+
+    cuda = config.use_cuda
+    os.environ['CUDA_VISIBLE_DEVICES'] = config.gpus
+    model = EfficientNet(config.arch, config.num_classes)
+    # 加载预训练模型
+    weights_name = config.model_nobn_path
+    if weights_name is not None:
+        if cuda:
+            state_dict = torch.load(weights_name)
+            model.load_state_dict(state_dict)
+            model.cuda()
+        else:
+            state_dict = torch.load(weights_name, map_location=torch.device('cpu'))
+            model.load_state_dict(state_dict)
+
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
+    ])
+    print("finish test no bn")
+    return testData(model, config.train_file, "train conf:", config.train_result_path, config.num_classes, config.trainDir)
+
+
+if __name__ == "__main__":
+    config = {}
+    with open("config.json", 'r') as f:
+        config = json.load(f)
+        f.close()
+    testAfterTrain(config)
