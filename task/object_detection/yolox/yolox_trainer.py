@@ -77,7 +77,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                 logger.error("'{}' model does not exist".format(self.arch))
                 return False
             self.exp.depth, self.exp.width = pretrain_model[self.arch]
-            self.ckpt_model = "./weights/{}.pth".format(self.train_config["ckpt_model"])
+            self.ckpt = "./weights/{}.pth".format(self.config["ckpt_model"])
             self.batch_size = self.config["batch_size"]
             self.devices = int(self.config["gpus"])
             self.patch_train = self.config["patch_train"]
@@ -120,11 +120,12 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                     self.exp.val_img = "crop_" + self.config["val_img"]
 
         self.epoch = 0
+        self.end_epoch = self.exp.max_epoch
         self.scaler = torch.cuda.amp.GradScaler(enabled=self.fp16)
         self.is_distributed = get_world_size() > 1
         self.rank = get_rank()
         self.local_rank = get_local_rank()
-        self.device = "cpu" if self.args.devices == -1 else "cuda:{}".format(self.devices)
+        self.device = "cpu" if self.devices == -1 else "cuda:{}".format(self.devices)
         self.use_model_ema = self.exp.ema
 
         self.data_type = torch.float16 if self.fp16 else torch.float32
@@ -133,7 +134,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
         self.meter = MeterBuffer(window_size=self.exp.print_interval)
 
-        cache_dir = os.path.join(train_dir, "cache")
+        cache_dir = os.path.join(self.export_dir, "cache")
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
         self.cache_dir = cache_dir
@@ -159,14 +160,14 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         # logger.info("args: {}".format(self.args))
         # logger.info("exp value:\n{}".format(self.exp))
         if self.devices != -1:
-            torch.cuda.set_device(self.args.devices)
+            torch.cuda.set_device(self.devices)
         model = self.exp.get_model()
         # logger.info(
         #     "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
         # )
         model.to(self.device)
 
-        self.optimizer = self.exp.get_optimizer(self.args.batch_size)
+        self.optimizer = self.exp.get_optimizer(self.batch_size)
 
         model = self.resume_train(model)
 
@@ -174,7 +175,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         # self.no_aug = True
         
         self.train_loader = self.exp.get_data_loader(
-            batch_size=self.args.batch_size,
+            batch_size=self.batch_size,
             is_distributed=self.is_distributed,
             no_aug=self.no_aug,
             cache_img=self.cache
@@ -326,9 +327,9 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         if self.is_resume:
             model = self.load_tmp_model(model)
         else:
-            if self.args.ckpt is not None:
+            if self.ckpt is not None:
                 logger.info("loading checkpoint for fine tuning")
-                ckpt_file = self.args.ckpt
+                ckpt_file = self.ckpt
                 ckpt = torch.load(ckpt_file, map_location=self.device)["model"]
                 model = load_ckpt(model, ckpt)
             self.start_epoch = 0
@@ -452,7 +453,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             testdev=False
         )
         testmodel = self.exp.get_model()
-        torch.cuda.set_device(self.args.devices)
+        torch.cuda.set_device(self.devices)
         testmodel.to(self.device)
         testmodel.eval()
         ckpt = torch.load(os.path.join(save_dir, "latest_ckpt.pth"), map_location=self.device)
@@ -497,20 +498,20 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
         with open(os.path.join(export_path, "predictor.json"), "w", encoding='utf-8') as pf:
             pred_json = {
-                "arch": self.train_config["arch"],
-                "class_names": self.train_config["class_names"],
-                "input_res": self.train_config["input_res"],
-                "score_threshold": self.train_config["score_threshold"],
-                "iou_thr": self.train_config["iou_thr"],
-                "num_classes": self.train_config["num_classes"],
+                "arch": self.config["arch"],
+                "class_names": self.config["class_names"],
+                "input_res": self.config["input_res"],
+                "score_threshold": self.config["score_threshold"],
+                "iou_thr": self.config["iou_thr"],
+                "num_classes": self.config["num_classes"],
                 "fp16": False,
-                "gpus": self.train_config["gpus"],
+                "gpus": self.config["gpus"],
             }
-            if self.train_config["patch_train"]:
-                pred_json["crop_w"] = self.train_config["crop_w"]
-                pred_json["crop_h"] = self.train_config["crop_h"]
-                pred_json["stride_x"] = self.train_config["stride_x"]
-                pred_json["stride_y"] = self.train_config["stride_y"]
+            if self.config["patch_train"]:
+                pred_json["crop_w"] = self.config["crop_w"]
+                pred_json["crop_h"] = self.config["crop_h"]
+                pred_json["stride_x"] = self.config["stride_x"]
+                pred_json["stride_y"] = self.config["stride_y"]
             json.dump(pred_json, pf, indent=4, ensure_ascii=False)
         return True
 
@@ -528,7 +529,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             ckpt = ckpt["model"]
         model.load_state_dict(ckpt)
         model = replace_module(model, nn.SiLU, SiLU)
-        model.head.decode_in_inference = self.args.decode_in_inference
+        model.head.decode_in_inference = self.decode_in_inference
 
         logger.info("loading checkpoint done.")
         dummy_input = torch.randn(1, 3, self.exp.test_size[0], self.exp.test_size[1]).cuda()
@@ -542,18 +543,18 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             dynamic_axes={
                 'images': {0: 'batch'},
                 'output': {0: 'batch'},
-            } if self.args.dynamic else None,
+            } if self.dynamic else None,
             opset_version=12,
         )
         logger.info("generated onnx model named {}".format("model.onnx"))
 
-        if not self.args.no_onnxsim:
+        if not self.no_onnxsim:
             import onnx
             from onnxsim import simplify
-            input_shapes = {"images": list(dummy_input.shape)} if self.args.dynamic else None
+            input_shapes = {"images": list(dummy_input.shape)} if self.dynamic else None
             onnx_model = onnx.load(os.path.join(export_path, "model.onnx"))
             model_simp, check = simplify(onnx_model,
-                                         dynamic_input_shape=self.args.dynamic,
+                                         dynamic_input_shape=self.dynamic,
                                          input_shapes=input_shapes)
             onnx.save(model_simp, os.path.join(export_path, "model.onnx"))
             logger.info("generated simplified onnx model named {}".format("model.onnx"))
@@ -566,7 +567,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
     def load_tmp_model(self, model):
         ckpt_file = os.path.join(self.cache_dir, "last_epoch_ckpt.pth")
         if not os.path.exists(ckpt_file):
-            ckpt_file = self.args.ckpt
+            ckpt_file = self.ckpt
         ckpt = torch.load(ckpt_file, map_location=self.device)
         model.load_state_dict(ckpt["model"])
         self.optimizer.load_state_dict(ckpt["optimizer"])
@@ -590,7 +591,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         ckpt = torch.load(os.path.join(model_path, "latest_ckpt.pth"), map_location=self.device)["model"]
         model = load_ckpt(model, ckpt)
         model = replace_module(model, nn.SiLU, SiLU)
-        model.head.decode_in_inference = self.args.decode_in_inference
+        model.head.decode_in_inference = self.decode_in_inference
 
         diff = 0.0
         for i in range(10):
