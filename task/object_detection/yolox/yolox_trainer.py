@@ -66,9 +66,10 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                     return False
 
             self.config = train_config
-            train_anno_path = os.path.join(train_dir, self.config["train_anno"])
+            logger.info(self.config)
+            train_anno_path = os.path.join(train_dir, "annotations", self.config["train_anno"])
             train_img_path = os.path.join(train_dir, self.config["train_img"])
-            val_anno_path = os.path.join(train_dir, self.config["val_anno"])
+            val_anno_path = os.path.join(train_dir, "annotations", self.config["val_anno"])
             val_img_path = os.path.join(train_dir, self.config["val_img"])
 
             self.exp.data_dir = train_dir
@@ -105,7 +106,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                 self.stride_y = self.config["stride_y"]
 
                 crop_train_img_path = os.path.join(train_dir, "crop_" + self.config["train_img"])
-                crop_train_anno_path = os.path.join(train_dir, "crop_" + self.config["train_anno"])
+                crop_train_anno_path = os.path.join(train_dir, "annotations/crop_" + self.config["train_anno"])
                 if not os.path.exists(crop_train_img_path) or not os.path.exists(crop_train_anno_path):
                     self.setupDataset(train_anno_path, train_img_path, crop_train_img_path, crop_train_anno_path)
                 self.exp.train_ann = "crop_" + self.config["train_anno"]
@@ -113,7 +114,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
                 if self.exp.eval_interval > 0:
                     crop_val_img_path = os.path.join(train_dir, "crop_" + self.config["val_img"])
-                    crop_val_anno_path = os.path.join(train_dir, "crop_" + self.config["val_anno"])
+                    crop_val_anno_path = os.path.join(train_dir, "annotations/crop_" + self.config["val_anno"])
                     if not os.path.exists(crop_val_img_path) or not os.path.exists(crop_val_anno_path):
                         self.setupDataset(val_anno_path, val_img_path, crop_val_img_path, crop_val_anno_path)
                     self.exp.val_ann = "crop_" + self.config["val_anno"]
@@ -144,16 +145,21 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         handler = logging.FileHandler(self.cache_dir + "/train_log.txt")
         logger.addHandler(handler)
 
+        logging.info("train images path: {}".format(self.exp.train_img))
+        logging.info("train annotations path: {}".format(self.exp.train_ann))
+        logging.info("val images path: {}".format(self.exp.val_img))
+        logging.info("val annotations path: {}".format(self.exp.val_ann))
+
         return True
 
     def setupTrain(self, train_dir: str, is_resume: bool = False) -> Status:
         if not os.path.exists(train_dir):
             logging.error("train_dir is not exist")
-        print("train_dir: ", train_dir)
+        logging.info("train_dir: {}".format(train_dir))
         if not self.setupInfo(train_dir):
             status = Status(success=False, error_str="setupInfo fail")
             return status
-        print("Creating model...")
+        logging.info("Creating model...")
 
         self.is_resume = is_resume
 

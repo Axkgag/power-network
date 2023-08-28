@@ -8,7 +8,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-t', '--train_dir',
                     default="")
 parser.add_argument('-c', '--train_config',
-                    default='trainer.json')
+                    default='config/trainer.json')
 
 if __name__ == "__main__":
     mysender = LogSender()
