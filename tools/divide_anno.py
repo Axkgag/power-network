@@ -3,9 +3,9 @@ import json
 from pycocotools.coco import COCO
 
 if __name__ == "__main__":
-    categories = [[1, 2, 3, 4],
-                  [5, 6, 7, 8, 9],
-                  [10, 11, 12, 13,14]]
+    categories = [[1, 2, 6, 7, 12, 14],
+                  [3, 4, 5, 8, 9],
+                  [10, 11, 13]]
 
     origin_path = "/data/gauss/lyh/datasets/power_networks/yolox/annotations"
     json_name = "val_annotations"

@@ -99,6 +99,13 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             self.exp.eval_interval = self.config["val_intervals"]
             self.export_dir = self.config["export_dir"]
 
+            if len(self.config["score_threshold"]) < self.exp.num_classes:
+                num_to_fil = self.exp.num_classes - len(self.config["score_threshold"])
+                self.config["score_threshold"].extend([0.5] * num_to_fil)
+            elif len(self.config["score_threshold"]) > self.exp.num_classes:
+                self.config["score_threshold"] = [0.5] * self.exp.num_classes
+
+
             if self.config["patch_train"]:
                 self.crop_w = self.config["crop_w"]
                 self.crop_h = self.config["crop_h"]
@@ -486,22 +493,6 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
     def exportModel(self, export_path: str) -> bool:
         self.save_ckpt(ckpt_name="latest", export_dir=export_path)
 
-        status = []
-        datasets = []
-        train_status = self.testTrainDataset(export_path, "train")
-        status.append(train_status)
-        datasets.append(1)
-        if self.val_dir != "":
-            val_status = self.testTrainDataset(export_path, "val")
-            status.append(val_status)
-            datasets.append(2)
-        if self.test_dir != "":
-            test_status = self.testTrainDataset(export_path, "test")
-            status.append(test_status)
-            datasets.append(3)
-        results = {"stats": status, "datasets": datasets, "task_type": "ObjectDetection"}
-        self.sender.send(method="train_result", data=results)
-
         with open(os.path.join(export_path, "predictor.json"), "w", encoding='utf-8') as pf:
             pred_json = {
                 "arch": self.config["arch"],
@@ -511,7 +502,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                 "iou_thr": self.config["iou_thr"],
                 "num_classes": self.config["num_classes"],
                 "fp16": False,
-                "gpus": self.config["gpus"],
+                "gpus": str(self.config["gpus"]),
             }
             if self.config["patch_train"]:
                 pred_json["crop_w"] = self.config["crop_w"]
@@ -519,6 +510,23 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                 pred_json["stride_x"] = self.config["stride_x"]
                 pred_json["stride_y"] = self.config["stride_y"]
             json.dump(pred_json, pf, indent=4, ensure_ascii=False)
+
+        # status = []
+        # datasets = []
+        # train_status = self.testTrainDataset(export_path, "train")
+        # status.append(train_status)
+        # datasets.append(1)
+        # if self.val_dir != "":
+        #     val_status = self.testTrainDataset(export_path, "val")
+        #     status.append(val_status)
+        #     datasets.append(2)
+        # if self.test_dir != "":
+        #     test_status = self.testTrainDataset(export_path, "test")
+        #     status.append(test_status)
+        #     datasets.append(3)
+        # results = {"stats": status, "datasets": datasets, "task_type": "ObjectDetection"}
+        # self.sender.send(method="train_result", data=results)
+
         return True
 
     def exportOnnx(self, model_dir: str, export_path: str):

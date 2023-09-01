@@ -150,7 +150,7 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
             # t0 = time.time()
             outputs = self.model(img)
             outputs = postprocess(
-                outputs, self.num_classes, 0.3,
+                outputs, self.num_classes, 0.2,
                 self.nmsthre, class_agnostic=True
             )
             # logger.info("Infer time: {:.4f}s".format(time.time() - t0))

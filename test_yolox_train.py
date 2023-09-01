@@ -20,3 +20,5 @@ if __name__ == "__main__":
     trainer = yolox_trainer.YoloxTrainer(mysender, train_config)
 
     trainer.beginTrain(train_dir, is_resume=False)
+
+    # nohup python run.py > /path/to/logs/output.log 2>&1 &
