@@ -21,4 +21,4 @@ if __name__ == "__main__":
 
     trainer.beginTrain(train_dir, is_resume=False)
 
-    # nohup python run.py > /path/to/logs/output.log 2>&1 &
+    # nohup python test_yolox_train.py -t /data/gauss/lyh/datasets/power_networks/yolox -c config/trainer_1.json > /data/gauss/lyh/datasets/power_networks/model/ensamble/model1/output.log 2>&1 &

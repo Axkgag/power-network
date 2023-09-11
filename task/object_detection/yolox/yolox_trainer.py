@@ -93,7 +93,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             self.exp.nmsthre = self.config["iou_thr"]
             self.exp.num_classes = self.config["num_classes"]
             self.exp.input_size = tuple(self.config["input_res"])
-            self.exp.test_conf = self.config["score_threshold"]
+            # self.exp.test_conf = self.config["score_threshold"]
             self.exp.max_epoch = self.config["num_epochs"]
             self.exp.data_num_workers = self.config["num_workers"]
             self.exp.eval_interval = self.config["val_intervals"]

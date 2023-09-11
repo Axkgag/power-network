@@ -26,7 +26,8 @@ if __name__ == "__main__":
     test_dir = args.test_dir
     model_dir = args.model_dir
 
-    predictor = yolox_predictor.createInstance(config_path=os.path.join(model_dir, "predictor.json"))
+    # predictor = yolox_predictor.createInstance(config_path=os.path.join(model_dir, "predictor.json"))
+    predictor = yolox_predictor.YoloxPredictor()
     if not predictor.loadModel(model_dir):
         logging.error("load model fail")
     else:

@@ -109,7 +109,7 @@ class Exp(BaseExp):
         self.test_size = (640, 640)
         # confidence threshold during evaluation/test,
         # boxes whose scores are less than test_conf will be filtered
-        self.test_conf = 0.01
+        self.test_conf = 0.3
         # nms threshold
         self.nmsthre = 0.65
 

@@ -59,9 +59,10 @@ class EnsamblePredictor(AbstractObjectDetectPredictor):
             scores = detections[:, 4]
             areas = (y2 - y1 + 1) * (x2 - x1 + 1)
             nms_index = []
-            areas_scores = np.array([(area, score) for area, score in zip(areas, scores)],
-                                    dtype=[("area", float), ("score", float)])
-            index = areas_scores.argsort(order=("area", "score"))[::-1]
+            # areas_scores = np.array([(area, score) for area, score in zip(areas, scores)],
+            #                         dtype=[("area", float), ("score", float)])
+            # index = areas_scores.argsort(order=("area", "score"))[::-1]
+            index = areas.argsort()[::-1].copy()
 
             while index.size > 0:
                 i = index[0]
@@ -305,7 +306,7 @@ if __name__ == "__main__":
                 save_folder = os.path.join(test_dir, "vis_res")
                 if not os.path.exists(save_folder):
                     os.makedirs(save_folder, exist_ok=True)
-                visual(img_path, img, save_folder, results, current_time)
+                # visual(img_path, img, save_folder, results, current_time)
             save_results(img_id, results, outputs)
             t1 = time.time()
             T += (t1 - t0)
