@@ -31,7 +31,7 @@ from .lib.utils import (
     adjust_status,
     all_reduce_norm,
     get_local_rank,
-    # get_model_info,
+    get_model_info,
     get_rank,
     get_world_size,
     gpu_mem_usage,
@@ -98,6 +98,10 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             self.exp.data_num_workers = self.config["num_workers"]
             self.exp.eval_interval = self.config["val_intervals"]
             self.export_dir = self.config["export_dir"]
+            self.exp.train_img = self.config["train_img"]
+            self.exp.train_ann = self.config["train_anno"]
+            self.exp.val_img = self.config["val_img"]
+            self.exp.val_ann = self.config["val_anno"]
 
             if len(self.config["score_threshold"]) < self.exp.num_classes:
                 num_to_fil = self.exp.num_classes - len(self.config["score_threshold"])
@@ -152,10 +156,11 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         handler = logging.FileHandler(self.cache_dir + "/train_log.txt")
         logger.addHandler(handler)
 
-        logging.info("train images path: {}".format(self.exp.train_img))
-        logging.info("train annotations path: {}".format(self.exp.train_ann))
-        logging.info("val images path: {}".format(self.exp.val_img))
-        logging.info("val annotations path: {}".format(self.exp.val_ann))
+        logging.info("train dir: {}".format(self.exp.data_dir))
+        logging.info("train images folder: {}".format(self.exp.train_img))
+        logging.info("train annotations name: {}".format(self.exp.train_ann))
+        logging.info("val images folder: {}".format(self.exp.val_img))
+        logging.info("val annotations name: {}".format(self.exp.val_ann))
 
         return True
 
@@ -175,9 +180,9 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         if self.devices != -1:
             torch.cuda.set_device(self.devices)
         model = self.exp.get_model()
-        # logger.info(
-        #     "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
-        # )
+        logger.info(
+            "Model Summary: {}".format(get_model_info(model, self.exp.test_size))
+        )
         model.to(self.device)
 
         self.optimizer = self.exp.get_optimizer(self.batch_size)

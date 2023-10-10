@@ -11,7 +11,6 @@ import torch.nn as nn
 
 from .base_exp import BaseExp
 
-
 class Exp(BaseExp):
     def __init__(self):
         super().__init__()
@@ -25,6 +24,7 @@ class Exp(BaseExp):
         self.width = 0.5
         # activation name. For example, if using "relu", then "silu" will be replaced to "relu".
         self.act = "silu"
+        self.model_mode = "base"
 
         # ---------------- dataloader config ---------------- #
         # set worker to 4 for shorter dataloader init time
@@ -39,11 +39,11 @@ class Exp(BaseExp):
         # dir of dataset images, if data_dir is None, this project will use `datasets` dir
         self.data_dir = None
         # name of images folder for train/val/test
-        self.train_img = "image"
+        self.train_img = "train"
         self.val_img = "val"
         self.test_img = "test"
         # name of annotation file for training
-        self.train_ann = "annotations.json"
+        self.train_ann = "train_annotations.json"
         # name of annotation file for evaluation
         self.val_ann = "val_annotations.json"
         # name of annotation file for testing
@@ -84,7 +84,7 @@ class Exp(BaseExp):
         # name of LRScheduler
         self.scheduler = "yoloxwarmcos"
         # last #epoch to close augmention like mosaic
-        self.no_aug_epochs = 50
+        self.no_aug_epochs = 20
         # apply EMA during training
         self.ema = True
 
@@ -94,7 +94,7 @@ class Exp(BaseExp):
         self.momentum = 0.9
         # log period in iter, for example,
         # if set to 1, user could see log every iteration.
-        self.print_interval = 200
+        self.print_interval = 20
         # eval period in epoch, for example,
         # if set to 1, model will be evaluate after every epoch.
         self.eval_interval = 10
@@ -109,12 +109,12 @@ class Exp(BaseExp):
         self.test_size = (640, 640)
         # confidence threshold during evaluation/test,
         # boxes whose scores are less than test_conf will be filtered
-        self.test_conf = 0.3
+        self.test_conf = 0.01
         # nms threshold
         self.nmsthre = 0.65
 
     def get_model(self):
-        from ..models import YOLOX, YOLOPAFPN, YOLOXHead
+        from ..models import YOLOX, YOLOPAFPN, YOLOXHead, HRHead, HRPAFPN, RBHead
 
         def init_yolo(M):
             for m in M.modules():
@@ -123,9 +123,15 @@ class Exp(BaseExp):
                     m.momentum = 0.03
 
         if getattr(self, "model", None) is None:
-            in_channels = [256, 512, 1024]
-            backbone = YOLOPAFPN(self.depth, self.width, in_channels=in_channels, act=self.act)
-            head = YOLOXHead(self.num_classes, self.width, in_channels=in_channels, act=self.act)
+            if self.model_mode == "base":
+                backbone = YOLOPAFPN(self.depth, self.width, act=self.act)
+                head = YOLOXHead(self.num_classes, self.width, act=self.act)
+            elif self.model_mode == "hr":
+                backbone = HRPAFPN(self.depth, self.width, act=self.act)
+                head = HRHead(self.num_classes, self.width, act=self.act)
+            elif self.model_mode == "rb":
+                backbone = YOLOPAFPN(self.depth, self.width, act=self.act)
+                head = RBHead(self.num_classes, self.width, act=self.act)
             self.model = YOLOX(backbone, head)
 
         self.model.apply(init_yolo)
@@ -140,6 +146,8 @@ class Exp(BaseExp):
             YoloBatchSampler,
             DataLoader,
             InfiniteSampler,
+            BalanceSampler,
+            BBNBatchSampler,
             MosaicDetection,
             worker_init_reset_seed,
         )
@@ -157,6 +165,9 @@ class Exp(BaseExp):
                     hsv_prob=self.hsv_prob),
                 cache=cache_img,
             )
+
+            if self.model_mode == 'rb':
+                rb_catList = self.get_rebalance_list(dataset)
 
         dataset = MosaicDetection(
             dataset,
@@ -183,12 +194,22 @@ class Exp(BaseExp):
 
         sampler = InfiniteSampler(len(self.dataset), seed=self.seed if self.seed else 0)
 
-        batch_sampler = YoloBatchSampler(
-            sampler=sampler,
-            batch_size=batch_size,
-            drop_last=False,
-            mosaic=not no_aug,
-        )
+        if self.model_mode == 'rb':
+            rb_sampler = BalanceSampler(rb_catList)
+            batch_sampler = BBNBatchSampler(
+                sampler1=sampler,
+                sampler2=rb_sampler,
+                batch_size=batch_size,
+                mosaic=not no_aug
+            )
+
+        else:
+            batch_sampler = YoloBatchSampler(
+                sampler=sampler,
+                batch_size=batch_size,
+                drop_last=False,
+                mosaic=not no_aug,
+            )
 
         dataloader_kwargs = {"num_workers": self.data_num_workers, "pin_memory": True}
         dataloader_kwargs["batch_sampler"] = batch_sampler
@@ -323,3 +344,26 @@ class Exp(BaseExp):
 
     def eval(self, model, evaluator, is_distributed, half=False, return_outputs=False):
         return evaluator.evaluate(model, is_distributed, half, return_outputs=return_outputs)
+
+    def get_rebalance_list(self, datasets):
+        from collections import defaultdict
+
+        class_ids = datasets.class_ids
+        class_dict = defaultdict(int)
+        for cls in class_ids:
+            anno_ids = datasets.coco.getAnnIds(catIds=cls)
+            class_dict[cls] = len(anno_ids)
+
+        class_dict = dict(sorted(class_dict.items(), key=lambda item: item[1]))
+        half_count = len(class_dict) // 2
+
+        keys = list(class_dict.keys())
+        selected_classes = keys[:half_count]
+
+        rebalance_set = set()
+        for tail_cls in selected_classes:
+            img_ids = datasets.coco.getImgIds(catIds=tail_cls)
+            rebalance_set.update(img_ids)
+
+        return list(rebalance_set)
+

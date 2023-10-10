@@ -2,3 +2,5 @@
 **/__pycache__
 /weights
 /log
+/datasets
+/outputs

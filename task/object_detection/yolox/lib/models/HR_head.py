@@ -3,27 +3,25 @@
 # Copyright (c) Megvii Inc. All rights reserved.
 
 import math
-# from loguru import logger
 import logging
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 
 from ..utils import bboxes_iou, meshgrid
 
-from .losses import IOUloss, EqlLoss
+from .losses import IOUloss
 from .network_blocks import BaseConv, DWConv
 
-
-class YOLOXHead(nn.Module):
+class HRHead(nn.Module):
     def __init__(
         self,
         num_classes,
         width=1.0,
-        strides=[8, 16, 32],
-        in_channels=[256, 512, 1024],
+        strides=[4, 8, 16, 32],
+        in_channels=[128, 256, 512, 1024],
+        weights=[1.0, 1.4, 1.5, 1.6],
         act="silu",
         depthwise=False,
     ):
@@ -130,6 +128,7 @@ class YOLOXHead(nn.Module):
         self.iou_loss = IOUloss(reduction="none", loss_type="iou")
         self.strides = strides
         self.grids = [torch.zeros(1)] * len(in_channels)
+        self.weights = weights
 
     def initialize_biases(self, prior_prob):
         for conv in self.cls_preds:
@@ -142,15 +141,16 @@ class YOLOXHead(nn.Module):
             b.data.fill_(-math.log((1 - prior_prob) / prior_prob))
             conv.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
-    def forward(self, xin, labels=None, imgs=None):
+    def forward(self, xin, labels=None, imgs=None, alpha=0.5):
         outputs = []
         origin_preds = []
         x_shifts = []
         y_shifts = []
         expanded_strides = []
+        layers_weights = []
 
-        for k, (cls_conv, reg_conv, stride_this_level, x) in enumerate(
-            zip(self.cls_convs, self.reg_convs, self.strides, xin)
+        for k, (cls_conv, reg_conv, stride_this_level, weight_this_level, x) in enumerate(
+            zip(self.cls_convs, self.reg_convs, self.strides, self.weights, xin)
         ):
             x = self.stems[k](x)
             cls_x = x
@@ -175,6 +175,13 @@ class YOLOXHead(nn.Module):
                     .fill_(stride_this_level)
                     .type_as(xin[0])
                 )
+
+                layers_weights.append(
+                    torch.zeros(reg_output.shape[0], grid.shape[1])
+                    .fill_(weight_this_level)
+                    .type_as(xin[0])
+                )
+
                 if self.use_l1:
                     batch_size = reg_output.shape[0]
                     hsize, wsize = reg_output.shape[-2:]
@@ -199,6 +206,7 @@ class YOLOXHead(nn.Module):
                 x_shifts,
                 y_shifts,
                 expanded_strides,
+                layers_weights,
                 labels,
                 torch.cat(outputs, 1),
                 origin_preds,
@@ -252,9 +260,8 @@ class YOLOXHead(nn.Module):
             shape = grid.shape[:2]
             strides.append(torch.full((*shape, 1), stride))
 
-        
-        grids = torch.cat(grids, dim=1).type(dtype).to(outputs.device)
-        strides = torch.cat(strides, dim=1).type(dtype).to(outputs.device)
+        grids = torch.cat(grids, dim=1).type(dtype)
+        strides = torch.cat(strides, dim=1).type(dtype)
 
         outputs[..., :2] = (outputs[..., :2] + grids) * strides
         outputs[..., 2:4] = torch.exp(outputs[..., 2:4]) * strides
@@ -266,6 +273,7 @@ class YOLOXHead(nn.Module):
         x_shifts,
         y_shifts,
         expanded_strides,
+        layer_weights,
         labels,
         outputs,
         origin_preds,
@@ -295,6 +303,7 @@ class YOLOXHead(nn.Module):
         x_shifts = torch.cat(x_shifts, 1)  # [1, n_anchors_all]
         y_shifts = torch.cat(y_shifts, 1)  # [1, n_anchors_all]
         expanded_strides = torch.cat(expanded_strides, 1)
+        layer_weights = torch.cat(layer_weights, 1)
         if self.use_l1:
             origin_preds = torch.cat(origin_preds, 1)
 
@@ -354,7 +363,6 @@ class YOLOXHead(nn.Module):
                            CPU mode is applied in this batch. If you want to avoid this issue, \
                            try to reduce the batch size or image size."
                     )
-
                     torch.cuda.empty_cache()
                     (
                         gt_matched_classes,
@@ -410,11 +418,20 @@ class YOLOXHead(nn.Module):
         fg_masks = torch.cat(fg_masks, 0)
         if self.use_l1:
             l1_targets = torch.cat(l1_targets, 0)
+        layer_weights = layer_weights.view(-1, 1)[fg_masks]
+
+        # test1 = bbox_preds.view(-1, 4)
+        # test1 = test1[fg_masks]
+        # # layer_weights /= layer_weights.shape[0]
+        # test2 = self.iou_loss(test1, reg_targets)
+        # test2 = test2.unsqueeze(-1) * layer_weights
+        # test2 = (test2 * layer_weights).sum() / max(num_fg, 1)
 
         num_fg = max(num_fg, 1)
         loss_iou = (
             self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)
-        ).sum() / num_fg
+        ).unsqueeze(-1) * layer_weights
+        loss_iou = loss_iou.sum() / num_fg
         loss_obj = (
             self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)
         ).sum() / num_fg
@@ -422,11 +439,13 @@ class YOLOXHead(nn.Module):
             self.bcewithlog_loss(
                 cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
             )
-        ).sum() / num_fg
+        ) * layer_weights
+        loss_cls = loss_cls.sum() / num_fg
         if self.use_l1:
             loss_l1 = (
                 self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)
-            ).sum() / num_fg
+            ) * layer_weights
+            loss_l1 = loss_l1.sum() / num_fg
         else:
             loss_l1 = 0.0
 
@@ -489,6 +508,28 @@ class YOLOXHead(nn.Module):
             total_num_anchors,
             num_gt,
         )
+
+        npa: int = fg_mask.sum().item()
+        if npa == 0:
+            gt_matched_classes = torch.zeros(0, device=fg_mask.device).long()
+            pred_ious_this_matching = torch.rand(0, device=fg_mask.device)
+            matched_gt_inds = gt_matched_classes
+            num_fg = npa
+
+            if mode == "cpu":
+                gt_matched_classes = gt_matched_classes.cuda()
+                fg_mask = fg_mask.cuda()
+                pred_ious_this_matching = pred_ious_this_matching.cuda()
+                matched_gt_inds = matched_gt_inds.cuda()
+                num_fg = num_fg.cuda()
+
+            return (
+                gt_matched_classes,
+                fg_mask,
+                pred_ious_this_matching,
+                matched_gt_inds,
+                num_fg,
+            )
 
         bboxes_preds_per_image = bboxes_preds_per_image[fg_mask]
         cls_preds_ = cls_preds[batch_idx][fg_mask]

@@ -9,3 +9,6 @@ from .yolo_fpn import YOLOFPN
 from .yolo_head import YOLOXHead
 from .yolo_pafpn import YOLOPAFPN
 from .yolox import YOLOX
+from .HR_head import HRHead
+from .HR_pafpn import HRPAFPN
+from .RB_head import RBHead
