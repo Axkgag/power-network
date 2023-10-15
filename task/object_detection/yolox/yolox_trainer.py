@@ -102,6 +102,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             self.exp.train_ann = self.config["train_anno"]
             self.exp.val_img = self.config["val_img"]
             self.exp.val_ann = self.config["val_anno"]
+            self.exp.model_mode = "base" if "model_mode" not in self.config else self.config["model_mode"]
 
             if len(self.config["score_threshold"]) < self.exp.num_classes:
                 num_to_fil = self.exp.num_classes - len(self.config["score_threshold"])
@@ -156,18 +157,19 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         handler = logging.FileHandler(self.cache_dir + "/train_log.txt")
         logger.addHandler(handler)
 
-        logging.info("train dir: {}".format(self.exp.data_dir))
-        logging.info("train images folder: {}".format(self.exp.train_img))
-        logging.info("train annotations name: {}".format(self.exp.train_ann))
-        logging.info("val images folder: {}".format(self.exp.val_img))
-        logging.info("val annotations name: {}".format(self.exp.val_ann))
+        logger.info("exp value:\n{}".format(self.exp))
+        # logging.info("train dir: {}".format(self.exp.data_dir))
+        # logging.info("train images folder: {}".format(self.exp.train_img))
+        # logging.info("train annotations name: {}".format(self.exp.train_ann))
+        # logging.info("val images folder: {}".format(self.exp.val_img))
+        # logging.info("val annotations name: {}".format(self.exp.val_ann))
 
         return True
 
     def setupTrain(self, train_dir: str, is_resume: bool = False) -> Status:
         if not os.path.exists(train_dir):
             logging.error("train_dir is not exist")
-        logging.info("train_dir: {}".format(train_dir))
+        # logging.info("train_dir: {}".format(train_dir))
         if not self.setupInfo(train_dir):
             status = Status(success=False, error_str="setupInfo fail")
             return status
@@ -501,6 +503,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         with open(os.path.join(export_path, "predictor.json"), "w", encoding='utf-8') as pf:
             pred_json = {
                 "arch": self.config["arch"],
+                "model_mode": self.exp.model_mode,
                 "class_names": self.config["class_names"],
                 "input_res": self.config["input_res"],
                 "score_threshold": self.config["score_threshold"],

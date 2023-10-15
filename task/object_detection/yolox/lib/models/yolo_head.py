@@ -3,19 +3,16 @@
 # Copyright (c) Megvii Inc. All rights reserved.
 
 import math
-# from loguru import logger
 import logging
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 
 from ..utils import bboxes_iou, meshgrid
 
-from .losses import IOUloss, EqlLoss
+from .losses import IOUloss
 from .network_blocks import BaseConv, DWConv
-
 
 class YOLOXHead(nn.Module):
     def __init__(
@@ -142,7 +139,7 @@ class YOLOXHead(nn.Module):
             b.data.fill_(-math.log((1 - prior_prob) / prior_prob))
             conv.bias = torch.nn.Parameter(b.view(-1), requires_grad=True)
 
-    def forward(self, xin, labels=None, imgs=None):
+    def forward(self, xin, labels=None, imgs=None, alpha=0.5):
         outputs = []
         origin_preds = []
         x_shifts = []
@@ -252,7 +249,6 @@ class YOLOXHead(nn.Module):
             shape = grid.shape[:2]
             strides.append(torch.full((*shape, 1), stride))
 
-        
         grids = torch.cat(grids, dim=1).type(dtype).to(outputs.device)
         strides = torch.cat(strides, dim=1).type(dtype).to(outputs.device)
 
@@ -489,6 +485,28 @@ class YOLOXHead(nn.Module):
             total_num_anchors,
             num_gt,
         )
+
+        npa: int = fg_mask.sum().item()
+        if npa == 0:
+            gt_matched_classes = torch.zeros(0, device=fg_mask.device).long()
+            pred_ious_this_matching = torch.rand(0, device=fg_mask.device)
+            matched_gt_inds = gt_matched_classes
+            num_fg = npa
+
+            if mode == "cpu":
+                gt_matched_classes = gt_matched_classes.cuda()
+                fg_mask = fg_mask.cuda()
+                pred_ious_this_matching = pred_ious_this_matching.cuda()
+                matched_gt_inds = matched_gt_inds.cuda()
+                num_fg = num_fg.cuda()
+
+            return (
+                gt_matched_classes,
+                fg_mask,
+                pred_ious_this_matching,
+                matched_gt_inds,
+                num_fg,
+            )
 
         bboxes_preds_per_image = bboxes_preds_per_image[fg_mask]
         cls_preds_ = cls_preds[batch_idx][fg_mask]

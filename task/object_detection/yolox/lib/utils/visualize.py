@@ -12,8 +12,8 @@ def vis(img, results, conf=0.5, class_names=None):
         for bbox_score in results[cls_name]:
             x0, y0, x1, y1, score = bbox_score
             cls_id = class_names.index(cls_name)
-            if score < conf:
-                continue
+            # if score < conf:
+            #     continue
             color = (_COLORS[cls_id] * 255).astype(np.uint8).tolist()
             text = '{}:{:.1f}%'.format(class_names[cls_id], score * 100)
             txt_color = (0, 0, 0) if np.mean(_COLORS[cls_id]) > 0.5 else (255, 255, 255)

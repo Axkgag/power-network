@@ -64,6 +64,7 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
         self.exp.test_conf = self.config["score_threshold"]
         self.exp.test_size = self.config["input_res"]
         self.exp.depth, self.exp.width = pretrain_model[self.arch]
+        self.exp.model_mode = "base" if "model_mode" not in self.config else self.config["model_mode"]
 
         if len(self.exp.test_conf) < self.exp.num_classes:
             num_to_fil = self.exp.num_classes - len(self.exp.test_conf)
@@ -79,6 +80,8 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
         self.device = "cpu" if self.config["gpus"] == "-1" else "cuda:" + self.config["gpus"]
         self.fp16 = self.config["fp16"]
         self.use_patch = self.setCropConfig(self.config)
+
+        logger.info("exp value:\n{}".format(self.exp))
 
         return True
 

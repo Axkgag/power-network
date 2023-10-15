@@ -8,90 +8,6 @@ import numpy as np
 
 from .network_blocks import BaseConv, CSPLayer, DWConv, Focus, ResLayer, SPPBottleneck
 
-class SpatialNorm(nn.Module):
-
-    def __init__(self, p=0.5, num_groups=64, eps=1e-5):
-        super(SpatialNorm, self).__init__()
-        self.eps = eps
-        self.p = p
-        self.factor = 1.0
-        self.T = 5
-        self.num_groups = num_groups
-
-    def _reparameterize(self, mu, std):
-        epsilon = torch.randn_like(std) * self.factor
-        return mu + epsilon * std
-
-    def sqrtvar(self, x):
-        t = (x.var(dim=0, keepdim=True) + self.eps).sqrt()
-        if len(x.shape) == 2:
-            t = t.repeat(x.shape[0], 1)
-        else:
-            t = t.repeat(x.shape[0], 1, 1)
-        return t
-
-    def matrix_power3(self, Input):
-        B = torch.bmm(Input, Input)
-        return torch.bmm(B, Input)
-
-    def groupwhitening(self, input):
-
-        size = input.size()
-        num_groups = min(self.num_groups, size[1])
-        # channel shuffle
-        idx = torch.randperm(size[1], dtype=torch.int64)
-        reverse_idx = torch.zeros_like(idx, dtype=torch.int64)\
-            .scatter_(0, idx, torch.arange(0, size[1], dtype=torch.int64))
-        input_shu = input[:, idx, :, :]
-
-        x = input_shu.view(size[0], num_groups, size[1] // num_groups, *size[2:])
-
-        x = x.view(size[0], num_groups, -1)  # 64 x 64 x -1
-        IG, d, m = x.size()
-        mean = x.mean(-1, keepdim=True)
-        x_mean = x - mean
-        P = [torch.Tensor([]) for _ in range(self.T + 1)]
-        sigma = x_mean.matmul(x_mean.transpose(1, 2)) / m  # 协方差
-
-        P[0] = torch.eye(d).to(x).expand(sigma.shape)
-        M_zero = sigma.clone().fill_(0)
-        trace_inv = torch.addcmul(M_zero, sigma, P[0]).sum((1, 2), keepdim=True).reciprocal_()  # 矩阵迹的倒数
-        sigma_N = torch.addcmul(M_zero, sigma, trace_inv)
-        for k in range(self.T):
-            P[k + 1] = torch.baddbmm(P[k], self.matrix_power3(P[k]), sigma_N, beta=1.5, alpha=-0.5)
-            # (input, batch1, batch2, beta, alpha): out = beta * input + alpha * (batch1 @ batch2)
-        wm = torch.addcmul(M_zero, P[self.T], trace_inv.sqrt())
-        # print(wm.shape) # 64 x 64 x 64
-        wm_inv = self.b_inv(wm)
-
-        sqrtvar_wm_inv = self.sqrtvar(wm_inv)
-        wm_inv_reparam = self._reparameterize(wm_inv, sqrtvar_wm_inv)
-        a1 = torch.triu(wm_inv_reparam)
-        a2 = torch.triu(wm_inv_reparam, diagonal=1)
-        gamma = a1 + a2.transpose(1, 2)
-
-        sqrtvar_mean = self.sqrtvar(mean)
-        beta = self._reparameterize(mean, sqrtvar_mean)
-        y = wm.matmul(x_mean)
-        y = gamma.matmul(y) + beta
-
-        output1 = y.view(size[0], num_groups, size[1] // num_groups, *size[2:])
-        output1 = output1.view_as(input)
-        output = output1[:, reverse_idx, :, :]
-
-        return output
-
-    def b_inv(self, b_mat):
-        eye = b_mat.new_ones(b_mat.size(-1)).diag().expand_as(b_mat)
-        # b_inv, _ = torch.solve(eye, b_mat)
-        b_inv = torch.linalg.solve(eye, b_mat)
-        return b_inv
-
-    def forward(self, x):
-        if (not self.training) or np.random.random() > self.p:
-            return x
-        x = self.groupwhitening(x)
-        return x
 
 class Darknet(nn.Module):
     # number of blocks from dark2 to dark5.
@@ -185,10 +101,9 @@ class CSPDarknet(nn.Module):
         self,
         dep_mul,
         wid_mul,
-        out_features=("dark3", "dark4", "dark5"),
+        out_features=("dark2", "dark3", "dark4", "dark5"),
         depthwise=False,
         act="silu",
-        uncertainty=0.0
     ):
         super().__init__()
         assert out_features, "please provide output features of Darknet"
@@ -251,31 +166,16 @@ class CSPDarknet(nn.Module):
             ),
         )
 
-        self.attn1 = SpatialNorm(p=uncertainty)
-        self.attn2 = SpatialNorm(p=uncertainty)
-        self.attn3 = SpatialNorm(p=uncertainty)
-        self.attn4 = SpatialNorm(p=uncertainty)
-        self.attn5 = SpatialNorm(p=uncertainty)
-
     def forward(self, x):
         outputs = {}
         x = self.stem(x)
-        x = self.attn1(x)
         outputs["stem"] = x
-
         x = self.dark2(x)
-        x = self.attn2(x)
         outputs["dark2"] = x
-
         x = self.dark3(x)
-        x = self.attn3(x)
         outputs["dark3"] = x
-
         x = self.dark4(x)
-        x = self.attn4(x)
         outputs["dark4"] = x
-
         x = self.dark5(x)
-        x = self.attn5(x)
         outputs["dark5"] = x
         return {k: v for k, v in outputs.items() if k in self.out_features}

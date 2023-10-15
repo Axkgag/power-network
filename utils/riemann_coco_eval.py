@@ -19,17 +19,17 @@ def actualGetAP(gt_anno,dets_anno,iou_type):#coco_anno, coco_dets
     new_eval.accumulate()
     new_eval.summarize()
     stats=new_eval.stats.tolist()
-    result["map"]=stats
-    result["class_ap_list"]=[]
+    # result["map"]=stats
+    # result["class_ap_list"]=[]
     
-    for info in cat_info:
-        print("computing for info",info)
-        new_eval.params.catIds=[info["id"]]
-        new_eval.evaluate()
-        new_eval.accumulate()
-        # new_eval.summarize()
-        stats=new_eval.stats.tolist()
-        result["class_ap_list"].append({"class_name":info["name"],"ap":stats})
+    # for info in cat_info:
+    #     print("computing for info",info)
+    #     new_eval.params.catIds=[info["id"]]
+    #     new_eval.evaluate()
+    #     new_eval.accumulate()
+    #     # new_eval.summarize()
+    #     stats=new_eval.stats.tolist()
+    #     result["class_ap_list"].append({"class_name":info["name"],"ap":stats})
     return result
 
 def getAPForRes(res_filename,origin_filename,iou_type):

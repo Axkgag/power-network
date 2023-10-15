@@ -24,7 +24,7 @@ class Exp(BaseExp):
         self.width = 0.5
         # activation name. For example, if using "relu", then "silu" will be replaced to "relu".
         self.act = "silu"
-        self.model_mode = "base"
+        self.model_mode = "base"  # base or hr or rb
 
         # ---------------- dataloader config ---------------- #
         # set worker to 4 for shorter dataloader init time
@@ -94,7 +94,7 @@ class Exp(BaseExp):
         self.momentum = 0.9
         # log period in iter, for example,
         # if set to 1, user could see log every iteration.
-        self.print_interval = 20
+        self.print_interval = 10
         # eval period in epoch, for example,
         # if set to 1, model will be evaluate after every epoch.
         self.eval_interval = 10
