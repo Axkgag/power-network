@@ -1,6 +1,7 @@
 import datetime
 import os
 import json
+import shutil
 import time
 # from loguru import logger
 
@@ -151,6 +152,8 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         if not os.path.exists(cache_dir):
             os.makedirs(cache_dir)
         self.cache_dir = cache_dir
+
+        shutil.copy(trainer_config_path, os.path.join(self.export_dir, "trainer.json"))
 
         self.task_type = "object_detection"
 
