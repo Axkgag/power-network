@@ -215,13 +215,15 @@ class RBHead(nn.Module):
             rbb_cls_feat = rbb_cls_conv(rbb_x)
             rbb_cls_output = self.rbb_cls_preds[k](rbb_cls_feat)
 
-            cls_feat = 2 * torch.cat([clb_cls_output * self.alpha, rbb_cls_output * (1 - self.alpha)], dim=1)
-            # if self.training:
-            #     cls_feat1 = 2 * torch.cat([clb_cls_output * 0.75, rbb_cls_output * 0.25], dim=1)
-            #     cls_feat2 = 2 * torch.cat([clb_cls_output * 0.25, rbb_cls_output * 0.75], dim=1)
-            #     cls_feat = torch.cat([cls_feat1, cls_feat2], dim=0)
-            # else:
-            #     cls_feat = torch.cat([clb_cls_output, rbb_cls_output], dim=1)
+            # cls_feat = 2 * torch.cat([clb_cls_output * self.alpha, rbb_cls_output * (1 - self.alpha)], dim=1)
+            
+            if self.training:
+                cls_feat1 = 2 * torch.cat([clb_cls_output * 0.5, rbb_cls_output * 0.5], dim=1)
+                cls_feat2 = 2 * torch.cat([clb_cls_output * self.alpha, rbb_cls_output * (1 - self.alpha)], dim=1)
+                cls_feat = torch.cat([cls_feat1, cls_feat2], dim=0)
+            else:
+                cls_feat = torch.cat([clb_cls_output, rbb_cls_output], dim=1)
+                
             cls_output = self.cls_preds[k](cls_feat)
             w_norm = torch.norm(self.cls_preds[k].weight, dim=1).unsqueeze(0)
             cls_output = self.omega[k] * cls_output + self.beta[k] * w_norm
@@ -231,8 +233,8 @@ class RBHead(nn.Module):
             obj_output = self.obj_preds[k](reg_feat)
 
             if self.training:
-                dual_cls_output = torch.cat([cls_output, cls_output], dim=0)
-                output = torch.cat([reg_output, obj_output, dual_cls_output], 1)
+                # dual_cls_output = torch.cat([cls_output, cls_output], dim=0)
+                output = torch.cat([reg_output, obj_output, cls_output], 1)
                 output, grid = self.get_output_and_grid(
                     output, k, stride_this_level, xin[0].type()
                 )

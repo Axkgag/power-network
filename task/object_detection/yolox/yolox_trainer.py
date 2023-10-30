@@ -104,6 +104,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             self.exp.val_img = self.config["val_img"]
             self.exp.val_ann = self.config["val_anno"]
             self.exp.model_mode = "base" if "model_mode" not in self.config else self.config["model_mode"]
+            self.exp.head_weight = self.config["head_weight"]
 
             if len(self.config["score_threshold"]) < self.exp.num_classes:
                 num_to_fil = self.exp.num_classes - len(self.config["score_threshold"])
@@ -507,6 +508,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             pred_json = {
                 "arch": self.config["arch"],
                 "model_mode": self.exp.model_mode,
+                "head_weight": self.exp.head_weight,
                 "class_names": self.config["class_names"],
                 "input_res": self.config["input_res"],
                 "score_threshold": self.config["score_threshold"],
@@ -540,49 +542,49 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
         return True
 
-    def exportOnnx(self, model_dir: str, export_path: str):
-        model = self.exp.get_model()
-        ckpt_file = os.path.join(model_dir, "latest_ckpt.pth")
-        if not os.path.exists(ckpt_file):
-            logger.error("ckpt is not exist !")
-            return
+    # def exportOnnx(self, model_dir: str, export_path: str):
+    #     model = self.exp.get_model()
+    #     ckpt_file = os.path.join(model_dir, "latest_ckpt.pth")
+    #     if not os.path.exists(ckpt_file):
+    #         logger.error("ckpt is not exist !")
+    #         return
 
-        ckpt = torch.load(ckpt_file, map_location="cpu")
+    #     ckpt = torch.load(ckpt_file, map_location="cpu")
 
-        model.eval()
-        if "model" in ckpt:
-            ckpt = ckpt["model"]
-        model.load_state_dict(ckpt)
-        model = replace_module(model, nn.SiLU, SiLU)
-        model.head.decode_in_inference = self.decode_in_inference
+    #     model.eval()
+    #     if "model" in ckpt:
+    #         ckpt = ckpt["model"]
+    #     model.load_state_dict(ckpt)
+    #     model = replace_module(model, nn.SiLU, SiLU)
+    #     model.head.decode_in_inference = self.decode_in_inference
 
-        logger.info("loading checkpoint done.")
-        dummy_input = torch.randn(1, 3, self.exp.test_size[0], self.exp.test_size[1]).cuda()
+    #     logger.info("loading checkpoint done.")
+    #     dummy_input = torch.randn(1, 3, self.exp.test_size[0], self.exp.test_size[1]).cuda()
 
-        torch.onnx._export(
-            model,
-            dummy_input,
-            os.path.join(export_path, "model.onnx"),
-            input_names=['images'],
-            output_names=['output'],
-            dynamic_axes={
-                'images': {0: 'batch'},
-                'output': {0: 'batch'},
-            } if self.dynamic else None,
-            opset_version=12,
-        )
-        logger.info("generated onnx model named {}".format("model.onnx"))
+    #     torch.onnx._export(
+    #         model,
+    #         dummy_input,
+    #         os.path.join(export_path, "model.onnx"),
+    #         input_names=['images'],
+    #         output_names=['output'],
+    #         dynamic_axes={
+    #             'images': {0: 'batch'},
+    #             'output': {0: 'batch'},
+    #         } if self.dynamic else None,
+    #         opset_version=12,
+    #     )
+    #     logger.info("generated onnx model named {}".format("model.onnx"))
 
-        if not self.no_onnxsim:
-            import onnx
-            from onnxsim import simplify
-            input_shapes = {"images": list(dummy_input.shape)} if self.dynamic else None
-            onnx_model = onnx.load(os.path.join(export_path, "model.onnx"))
-            model_simp, check = simplify(onnx_model,
-                                         dynamic_input_shape=self.dynamic,
-                                         input_shapes=input_shapes)
-            onnx.save(model_simp, os.path.join(export_path, "model.onnx"))
-            logger.info("generated simplified onnx model named {}".format("model.onnx"))
+    #     if not self.no_onnxsim:
+    #         import onnx
+    #         from onnxsim import simplify
+    #         input_shapes = {"images": list(dummy_input.shape)} if self.dynamic else None
+    #         onnx_model = onnx.load(os.path.join(export_path, "model.onnx"))
+    #         model_simp, check = simplify(onnx_model,
+    #                                      dynamic_input_shape=self.dynamic,
+    #                                      input_shapes=input_shapes)
+    #         onnx.save(model_simp, os.path.join(export_path, "model.onnx"))
+    #         logger.info("generated simplified onnx model named {}".format("model.onnx"))
 
 
     def save_tmp_model(self):
@@ -605,28 +607,28 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
         )
         return model
 
-    def verify_onnx_model(self, model_path, onnx_model_path):
-        import onnxruntime as rt
-        import numpy as np
+    # def verify_onnx_model(self, model_path, onnx_model_path):
+    #     import onnxruntime as rt
+    #     import numpy as np
 
-        sess = rt.InferenceSession(os.path.join(onnx_model_path, "model.onnx"))
-        model = self.exp.get_model()
-        model.eval()
-        model.to(self.device)
-        ckpt = torch.load(os.path.join(model_path, "latest_ckpt.pth"), map_location=self.device)["model"]
-        model = load_ckpt(model, ckpt)
-        model = replace_module(model, nn.SiLU, SiLU)
-        model.head.decode_in_inference = self.decode_in_inference
+    #     sess = rt.InferenceSession(os.path.join(onnx_model_path, "model.onnx"))
+    #     model = self.exp.get_model()
+    #     model.eval()
+    #     model.to(self.device)
+    #     ckpt = torch.load(os.path.join(model_path, "latest_ckpt.pth"), map_location=self.device)["model"]
+    #     model = load_ckpt(model, ckpt)
+    #     model = replace_module(model, nn.SiLU, SiLU)
+    #     model.head.decode_in_inference = self.decode_in_inference
 
-        diff = 0.0
-        for i in range(10):
-            x = torch.rand((1, 3, self.exp.test_size[0], self.exp.test_size[1]))
-            model_output = model(x.cuda())
+    #     diff = 0.0
+    #     for i in range(10):
+    #         x = torch.rand((1, 3, self.exp.test_size[0], self.exp.test_size[1]))
+    #         model_output = model(x.cuda())
 
-            onnx_input = {sess.get_inputs()[0].name: x.numpy()}
-            onnx_output = sess.run(None, onnx_input)
+    #         onnx_input = {sess.get_inputs()[0].name: x.numpy()}
+    #         onnx_output = sess.run(None, onnx_input)
 
-            model_output = model_output.detach().cpu().numpy()
+    #         model_output = model_output.detach().cpu().numpy()
 
-            diff += np.mean(np.abs(model_output - onnx_output[0]))
-        print("error: ", diff / 10)
+    #         diff += np.mean(np.abs(model_output - onnx_output[0]))
+    #     print("error: ", diff / 10)

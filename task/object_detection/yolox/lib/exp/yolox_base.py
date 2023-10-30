@@ -24,7 +24,8 @@ class Exp(BaseExp):
         self.width = 0.5
         # activation name. For example, if using "relu", then "silu" will be replaced to "relu".
         self.act = "silu"
-        self.model_mode = "base"  # base or hr or rb
+        self.model_mode = "base"  # base or hr or rb or all 
+        self.head_weight = [1.0, 1.4, 1.5, 1.6]
 
         # ---------------- dataloader config ---------------- #
         # set worker to 4 for shorter dataloader init time
@@ -84,7 +85,7 @@ class Exp(BaseExp):
         # name of LRScheduler
         self.scheduler = "yoloxwarmcos"
         # last #epoch to close augmention like mosaic
-        self.no_aug_epochs = 20
+        self.no_aug_epochs = 60
         # apply EMA during training
         self.ema = True
 
@@ -128,10 +129,13 @@ class Exp(BaseExp):
                 head = YOLOXHead(self.num_classes, self.width, act=self.act)
             elif self.model_mode == "hr":
                 backbone = HRPAFPN(self.depth, self.width, act=self.act)
-                head = HRHead(self.num_classes, self.width, act=self.act)
+                head = HRHead(self.num_classes, self.width, weights=self.head_weight, act=self.act)
             elif self.model_mode == "rb":
                 backbone = YOLOPAFPN(self.depth, self.width, act=self.act)
                 head = RBHead(self.num_classes, self.width, act=self.act)
+            elif self.model_mode == "all":
+                backbone = HRPAFPN(self.depth, self.width, act=self.act)
+                head = RBHead(self.num_classes, self.width, strides=[4, 8, 16, 32], in_channels=[128, 256, 512, 1024], act=self.act)
             self.model = YOLOX(backbone, head)
 
         self.model.apply(init_yolo)

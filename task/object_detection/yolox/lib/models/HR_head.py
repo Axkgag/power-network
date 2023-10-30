@@ -21,7 +21,7 @@ class HRHead(nn.Module):
         width=1.0,
         strides=[4, 8, 16, 32],
         in_channels=[128, 256, 512, 1024],
-        weights=[1.0, 1.4, 1.5, 1.6],
+        weights=[1.0, 1.2, 1.3, 1.4],
         act="silu",
         depthwise=False,
     ):
@@ -260,8 +260,8 @@ class HRHead(nn.Module):
             shape = grid.shape[:2]
             strides.append(torch.full((*shape, 1), stride))
 
-        grids = torch.cat(grids, dim=1).type(dtype)
-        strides = torch.cat(strides, dim=1).type(dtype)
+        grids = torch.cat(grids, dim=1).type(dtype).to(outputs.device)
+        strides = torch.cat(strides, dim=1).type(dtype).to(outputs.device)
 
         outputs[..., :2] = (outputs[..., :2] + grids) * strides
         outputs[..., 2:4] = torch.exp(outputs[..., 2:4]) * strides

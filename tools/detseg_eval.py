@@ -252,20 +252,22 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
         coco_eval.evaluate()
         coco_eval.accumulate()
         coco_eval.summarize()
-        map = coco_eval.stats.tolist()[0]
-        results["map"] = round(map, 3)
+        map = coco_eval.stats.tolist()[:6]
+        # results["map"] = round(map, 3)
+        results["map"] = map
 
         for cat in cats:
             coco_eval.params.catIds = cat["id"]
             coco_eval.evaluate()
             coco_eval.accumulate()
             coco_eval.summarize()
-            clas_ap = coco_eval.stats.tolist()[0]
+            clas_ap = coco_eval.stats.tolist()[:6]
             # results["classAPs"].append({
             #     "class_name": cat["name"],
             #     "AP": round(clas_ap, 3)
             # })
-            results["categories"][cat["name"]]["ap"] = round(clas_ap, 3)
+            # results["categories"][cat["name"]]["ap"] = round(clas_ap, 3)
+            results["categories"][cat["name"]]["ap"] = clas_ap[:6]
 
     elif mode == 'seg':
         coco_eval = COCOeval(coco_gt, coco_dt, 'segm')
@@ -528,10 +530,10 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-a', '--ann_dir',
-                    default="../../data/grid/train/annotations.json",
+                    default="./datasets/grid/annotations/val_annotations.json",
                     help='annotations.json file dir')
 parser.add_argument('-r', '--res_dir',
-                    default="../../data/grid/train/base_results.json",
+                    default="./outputs/test/hr5/test_results.json",
                     help='results.json file dir')
 parser.add_argument('-t', '--iou_thres',
                     default=0.4,
@@ -541,7 +543,7 @@ parser.add_argument('-m', '--mode',
                     default="obj",
                     help='obj/rot/def/seg')
 parser.add_argument('-s', '--save_path',
-                    # default="../../data/grid/train/rb_eval_results.json",
+                    default="./outputs/test/hr5/eval.json",
                     help='eval results save path')
 
 
