@@ -1,3 +1,0 @@
-nohup: ignoring input
-usage: test_yolox_train.py [-h] [-t TRAIN_DIR] [-c TRAIN_CONFIG] [-r]
-test_yolox_train.py: error: unrecognized arguments: /outputs/MS_50/output.log

@@ -95,7 +95,7 @@ class Exp(BaseExp):
         self.momentum = 0.9
         # log period in iter, for example,
         # if set to 1, user could see log every iteration.
-        self.print_interval = 10
+        self.print_interval = 100
         # eval period in epoch, for example,
         # if set to 1, model will be evaluate after every epoch.
         self.eval_interval = 10
@@ -170,7 +170,7 @@ class Exp(BaseExp):
                 cache=cache_img,
             )
 
-            if self.model_mode == 'rb':
+            if self.model_mode == 'rb' or self.model_mode == "all":
                 rb_catList = self.get_rebalance_list(dataset)
 
         dataset = MosaicDetection(
@@ -198,7 +198,7 @@ class Exp(BaseExp):
 
         sampler = InfiniteSampler(len(self.dataset), seed=self.seed if self.seed else 0)
 
-        if self.model_mode == 'rb':
+        if self.model_mode == 'rb' or self.model_mode == "all":
             rb_sampler = BalanceSampler(rb_catList)
             batch_sampler = BBNBatchSampler(
                 sampler1=sampler,

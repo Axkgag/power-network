@@ -13,6 +13,9 @@ parser.add_argument('-c', '--train_config',
 parser.add_argument('-r', '--is_resume',
                     action="store_true",
                     default=False)
+parser.add_argument('-m', '--test_mode',
+                    type=str,
+                    default=None)
 
 if __name__ == "__main__":
     mysender = LogSender()
@@ -21,10 +24,12 @@ if __name__ == "__main__":
     train_dir = args.train_dir
     train_config = args.train_config
     is_resume = args.is_resume
+    test_mode = args.test_mode
 
     trainer = yolox_trainer.YoloxTrainer(mysender, train_config)
 
     trainer.beginTrain(train_dir, is_resume=is_resume)
 
-    test(train_dir, trainer.export_dir, False, "val")
+    if test_mode:
+        test(train_dir, trainer.export_dir, False, test_mode)
     # nohup python test_yolox_train.py -t /data/gauss/lyh/datasets/power_networks/yolox -c config/trainer_1.json > /data/gauss/lyh/datasets/power_networks/model/ensamble/model1/output.log 2>&1 &

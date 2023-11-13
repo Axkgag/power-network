@@ -219,63 +219,77 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
 
     # 计算评价指标
     recall_b = sum(tp_b.values()) / (sum(tp_b.values()) + sum(fn_b.values()) + 1e-16)
+    precision_b = sum(tp_b.values()) / (sum(tp_b.values()) + sum(fp_b.values()) + 1e-16)
     error_b = (sum(fn_b.values()) + sum(fp_b.values())) / (sum(tp_b.values()) + sum(fn_b.values()) + 1e-16)
 
     results['all_bbox'] = {
-        "detection_rate": round(recall_b, 3),
+        "recall": round(recall_b, 3),
+        "precision": round(precision_b, 3),
         "false_detection_ratio": round(error_b, 3)
     }
 
     recall_s = tp_s / (tp_s + fn_s + 1e-16)
+    precision_s = tp_s / (tp_s + fp_s + 1e-16)
     error_s = (fn_s + fp_s) / (tp_s + fn_s + 1e-16)
 
     recall_l = tp_l / (tp_l + fn_l + 1e-16)
+    precision_l = tp_l / (tp_l + fp_l + 1e-16)
     error_l = (fn_l + fp_l) / (tp_l + fn_l + 1e-16)
 
     results['size'] = {
         "small":{
             "nums": nums_s,
-            "detection_rate": round(recall_s, 3),
+            "recall": round(recall_s, 3),
+            "precision": round(precision_s, 3),
             "false_detection_ratio": round(error_s, 3)
         },
-        "large": {
+        "noraml": {
             "nums": nums_l,
-            "detection_rate": round(recall_l, 3),
+            "recall": round(recall_l, 3),
+            "precision": round(precision_l, 3),
             "false_detection_ratio": round(error_l, 3)
         }
     }
 
 
     recall_f = tp_f / (tp_f + fn_f + 1e-16)
+    precision_f = tp_f / (tp_f + fp_f + 1e-16)
     error_f = (fn_f + fp_f) / (tp_f + fn_f + 1e-16)
 
     recall_n = tp_n / (tp_n + fn_n + 1e-16)
+    precision_n = tp_n / (tp_n + fp_n + 1e-16)
     error_n = (fn_n + fp_n) / (tp_n + fn_n + 1e-16)
 
     recall_r = tp_r / (tp_r + fn_r + 1e-16)
+    precision_r = tp_r / (tp_r + fp_r + 1e-16)
     error_r = (fn_r + fp_r) / (tp_r + fn_r + 1e-16)
 
     results['frequency'] = {
         "rare":{
-            "detection_rate": round(recall_r, 3),
+            "recall": round(recall_r, 3),
+            "precision": round(precision_r, 3),
             "false_detection_ratio": round(error_r, 3)
         },
-        "normal": {
-            "detection_rate": round(recall_n, 3),
+        "comman": {
+            "recall": round(recall_n, 3),
+            "precision": round(precision_n, 3),
             "false_detection_ratio": round(error_n, 3)
         },
         "frequent": {
-            "detection_rate": round(recall_f, 3),
+            "recall": round(recall_f, 3),
+            "precision": round(precision_f, 3),
             "false_detection_ratio": round(error_f, 3)
         }
     }
 
     for cat in cat_names:
         recall = tp_b[cat] / (tp_b[cat] + fn_b[cat] + 1e-16)
+        precision = tp_b[cat] / (tp_b[cat] + fp_b[cat] + 1e-16)
         error = (fn_b[cat] + fp_b[cat]) / (tp_b[cat] + fn_b[cat] + 1e-16)
 
         results["categories"][cat]["bbox nums"] = tp_b[cat] + fn_b[cat]
-        results["categories"][cat]["detection_rate"] = round(recall, 3)
+        results["categories"][cat]["recall"] = round(recall, 3)
+        results["categories"][cat]["precision"] = round(precision, 3)
         results["categories"][cat]["false_detection_ratio"] = round(error, 3)
 
     print(results)

@@ -86,7 +86,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
 
             self.fp16 = False
             self.cache = False
-            self.occupy = False
+            self.occupy = True
             self.dynamic = False
             self.decode_in_inference = False
             self.no_onnxsim = False
@@ -212,7 +212,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             self.exp.basic_lr_per_img * self.batch_size, self.max_iter
         )
         if self.occupy:
-            occupy_mem(5)
+            occupy_mem(self.devices)
 
         if self.is_distributed:
             model = DDP(model, device_ids=[self.local_rank], broadcast_buffers=False)
