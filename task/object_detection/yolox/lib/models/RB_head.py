@@ -21,6 +21,7 @@ class RBHead(nn.Module):
         width=1.0,
         strides=[8, 16, 32],
         in_channels=[256, 512, 1024],
+        weights = [1.0, 1.0, 1.0],
         act="silu",
         depthwise=False,
     ):
@@ -177,6 +178,7 @@ class RBHead(nn.Module):
                                        for _ in range(len(in_channels))])
         self.beta = nn.ParameterList([nn.Parameter(torch.zeros(1, self.n_anchors * self.num_classes, 1, 1))
                                       for _ in range(len(in_channels))])
+        self.weights = weights
 
     def initialize_biases(self, prior_prob):
         for conv in self.cls_preds:
@@ -195,10 +197,11 @@ class RBHead(nn.Module):
         x_shifts = []
         y_shifts = []
         expanded_strides = []
+        layers_weights = []
         self.alpha = alpha
 
-        for k, (clb_cls_conv, rbb_cls_conv, reg_conv, stride_this_level, x) in enumerate(
-            zip(self.clb_cls_convs, self.rbb_cls_convs, self.reg_convs, self.strides, xin)
+        for k, (clb_cls_conv, rbb_cls_conv, reg_conv, stride_this_level, weight_this_level, x) in enumerate(
+            zip(self.clb_cls_convs, self.rbb_cls_convs, self.reg_convs, self.strides, self.weights, xin)
         ):
             x = self.stems[k](x)
             cls_x = x
@@ -246,6 +249,12 @@ class RBHead(nn.Module):
                     .type_as(xin[0])
                 )
 
+                layers_weights.append(
+                    torch.zeros(reg_output.shape[0], grid.shape[1])
+                    .fill_(weight_this_level)
+                    .type_as(xin[0])
+                )
+
                 if self.use_l1:
                     batch_size = reg_output.shape[0]
                     hsize, wsize = reg_output.shape[-2:]
@@ -270,6 +279,7 @@ class RBHead(nn.Module):
                 x_shifts,
                 y_shifts,
                 expanded_strides,
+                layers_weights,
                 labels,
                 torch.cat(outputs, 1),
                 origin_preds,
@@ -336,6 +346,7 @@ class RBHead(nn.Module):
         x_shifts,
         y_shifts,
         expanded_strides,
+        layers_weights,
         labels,
         outputs,
         origin_preds,
@@ -365,9 +376,10 @@ class RBHead(nn.Module):
         x_shifts = torch.cat(x_shifts, 1)  # [1, n_anchors_all]
         y_shifts = torch.cat(y_shifts, 1)  # [1, n_anchors_all]
         expanded_strides = torch.cat(expanded_strides, 1)
+        layers_weights = torch.cat(layers_weights, 1)
         if self.use_l1:
             origin_preds = torch.cat(origin_preds, 1)
-
+        
         clb_targets = []
         rbb_targets = []
         reg_targets = []
@@ -506,26 +518,35 @@ class RBHead(nn.Module):
         num_fg = max(num_fg, 1)
         loss_iou = (
             self.iou_loss(bbox_preds.view(-1, 4)[fg_masks], reg_targets)
-        ).sum() / num_fg
+        ).unsqueeze(-1) * layers_weights.view(-1, 1)[fg_masks]
+        loss_iou = loss_iou.sum() / num_fg
+
         loss_obj = (
             self.bcewithlog_loss(obj_preds.view(-1, 1), obj_targets)
         ).sum() / num_fg
+
         # loss_cls = (
         #     self.bcewithlog_loss(
         #         cls_preds.view(-1, self.num_classes)[fg_masks], cls_targets
         #     )
         # ) .sum() / num_fg
+        clb_layers_weights, rbb_layers_weights = torch.split(layers_weights, int(batch_size / 2), dim=0)
         loss_clb = (
                self.bcewithlog_loss(
                    clb_preds.view(-1, self.num_classes)[fg_clb_masks], clb_targets
                )
-        ).sum() / num_fg_clb
+        ) * clb_layers_weights.view(-1, 1)[fg_clb_masks]
+        loss_clb = loss_clb.sum() / num_fg_clb
+
         loss_rbb = (
                self.bcewithlog_loss(
                    rbb_preds.view(-1, self.num_classes)[fg_rbb_masks], rbb_targets
                )
-        ).sum() / num_fg_rbb
+        ) * rbb_layers_weights.view(-1, 1)[fg_rbb_masks]
+        loss_rbb = loss_rbb.sum() / num_fg_rbb
+
         loss_cls = loss_clb * self.alpha + loss_rbb * (1 - self.alpha)
+        # loss_cls = loss_clb + loss_rbb
         if self.use_l1:
             loss_l1 = (
                 self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)

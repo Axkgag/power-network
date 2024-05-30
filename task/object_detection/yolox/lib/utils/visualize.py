@@ -19,18 +19,25 @@ def vis(img, results, conf=0.5, class_names=None):
             txt_color = (0, 0, 0) if np.mean(_COLORS[cls_id]) > 0.5 else (255, 255, 255)
             font = cv2.FONT_HERSHEY_SIMPLEX
 
-            txt_size = cv2.getTextSize(text, font, 0.4, 1)[0]
-            cv2.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)), color, 2)
+            txt_size = cv2.getTextSize(text, font, 1, 1)[0]
+            cv2.rectangle(img, (int(x0), int(y0)), (int(x1), int(y1)), color, 6)
 
             txt_bk_color = (_COLORS[cls_id] * 255 * 0.7).astype(np.uint8).tolist()
+            # cv2.rectangle(
+            #     img,
+            #     (int(x0), int(y0 + 1)),
+            #     (int(x0 + txt_size[0] + 1), int(y0 + 1.5 * txt_size[1])),
+            #     txt_bk_color,
+            #     -1
+            # )
             cv2.rectangle(
                 img,
-                (int(x0), int(y0 + 1)),
-                (int(x0 + txt_size[0] + 1), int(y0 + 1.5 * txt_size[1])),
+                (int(x0), int(y0 - txt_size[1])),
+                (int(x0 + txt_size[0] + 1), int(y0)),
                 txt_bk_color,
                 -1
             )
-            cv2.putText(img, text, (int(x0), int(y0 + txt_size[1])), font, 0.4, txt_color, thickness=1)
+            cv2.putText(img, text, (int(x0), int(y0)), font, 1, txt_color, thickness=1)
     return img
 
 

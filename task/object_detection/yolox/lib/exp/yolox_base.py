@@ -135,7 +135,7 @@ class Exp(BaseExp):
                 head = RBHead(self.num_classes, self.width, act=self.act)
             elif self.model_mode == "all":
                 backbone = HRPAFPN(self.depth, self.width, act=self.act)
-                head = RBHead(self.num_classes, self.width, strides=[4, 8, 16, 32], in_channels=[128, 256, 512, 1024], act=self.act)
+                head = RBHead(self.num_classes, self.width, strides=[4, 8, 16, 32], in_channels=[128, 256, 512, 1024], weights=self.head_weight, act=self.act)
             self.model = YOLOX(backbone, head)
 
         self.model.apply(init_yolo)

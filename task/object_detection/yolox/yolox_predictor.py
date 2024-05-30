@@ -138,6 +138,8 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
 
         ratio = min(self.test_size[0] / img.shape[0], self.test_size[1] / img.shape[1])
         img_info["ratio"] = ratio
+            
+        t0 = time.time()
 
         img, _ = self.preproc(img, None, self.test_size)
         img = torch.from_numpy(img).unsqueeze(0)
@@ -150,14 +152,16 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
             img = img.half()
 
         with torch.no_grad():
-            # t0 = time.time()
             outputs = self.model(img)
             outputs = postprocess(
                 outputs, self.num_classes, 0.2,
                 self.nmsthre, class_agnostic=True
             )
-            # logger.info("Infer time: {:.4f}s".format(time.time() - t0))
-        return outputs, img_info
+        
+        t1 = time.time()
+        # print((t1 - t0) * 1000)
+        # logger.info("Infer time: {:.4f}s".format(time.time() - t0))
+        return outputs, img_info, (t1 - t0) * 1000
 
     def visual(self, img_dir, save_dir, results_dict, current_time):
         results = results_dict["results"]
@@ -172,7 +176,8 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
         save_file_name = os.path.join(save_folder, os.path.basename(img_dir))
         # logger.info("Saving detection result in {}".format(save_file_name))
         # cv2.imwrite(save_file_name, result_image)
-        cv2.imencode('.jpg', result_image)[1].tofile(save_file_name)
+        params = [cv2.IMWRITE_JPEG_QUALITY, 40]
+        cv2.imencode('.jpg', result_image, params)[1].tofile(save_file_name)
 
     def save_results(self, img_id, results_dict, outputs):
         results = results_dict["results"]
@@ -193,12 +198,12 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
 
     def predict(self, img: Any, info: Dict[str, Any] = None) -> Dict[str, Any]:
         t0 = time.time()
-        outputs, img_info = self.inference(img)
+        outputs, img_info, infer_time = self.inference(img)
         ratio = img_info["ratio"]
         output = outputs[0]
 
         results = {}
-        final_results = {"results": results}
+        final_results = {"results": results, "infer_time": 0.0}
 
         if output is None:
             return final_results
@@ -221,6 +226,7 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
 
         new_results = self.filter_by_iou(results)
         final_results["results"] = new_results
+        final_results["infer_time"] = infer_time
 
         # final_results["results"] = results
 
@@ -303,7 +309,8 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
                 h = np.maximum(0, y22 - y11 + 1)
                 overlaps = w * h
 
-                ious = overlaps / np.minimum(areas[i], areas[index[1:]])
+                # ious = overlaps / np.minimum(areas[i], areas[index[1:]])
+                ious = overlaps / (areas[i]+areas[index[1:]] - overlaps)
 
                 idx = np.where(ious <= iou_thr)[0]
                 index = index[(idx + 1)]

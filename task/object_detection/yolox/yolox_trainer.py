@@ -212,7 +212,7 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
             self.exp.basic_lr_per_img * self.batch_size, self.max_iter
         )
         if self.occupy:
-            occupy_mem(self.devices)
+            occupy_mem(self.devices, 0.95)
 
         if self.is_distributed:
             model = DDP(model, device_ids=[self.local_rank], broadcast_buffers=False)

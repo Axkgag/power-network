@@ -716,6 +716,8 @@ class AbstractObjectDetectPredictor(AbstractPredictor):
         # crop_x, crop_y = self.crop_w, self.crop_h
         # stride_x, stride_y = self.stride_x, self.stride_y
 
+        Infer_time = 0
+
         h, w, c = img.shape
         # h_r = w_r = 3  # 滑动次数
         # stride = 256  # 滑动步长, 实际滑动步长为512-stride
@@ -751,6 +753,9 @@ class AbstractObjectDetectPredictor(AbstractPredictor):
                     # 一个滑窗预测的结果
                     ret_crop = self.predict(img_crop)
                     ret = ret_crop["results"]
+
+                    Infer_time += ret_crop['infer_time']
+
                     if len(ret) == 0:
                         continue
                     # cls_id, bbox_scores分别是预测类别和预测结果
@@ -810,7 +815,7 @@ class AbstractObjectDetectPredictor(AbstractPredictor):
                 filtered_cat_result.append(bbox_score)
             final_results[cat_id] = filtered_cat_result
 
-        ret = {"results": final_results}
+        ret = {"results": final_results, "infer_time": Infer_time}
         return ret
 
     def smartPredict(self, img: Any, info: Dict[str, Any] = None):

@@ -12,18 +12,18 @@ np.set_printoptions(linewidth=500)
 cls_bins = {
         "010101021": "rare",
         "010101031": "rare",
-        "010101061": "normal",
-        "010101071": "normal",
+        "010101061": "common",
+        "010101071": "common",
         "010201041": "frequent",
         "010202021": "rare",
         "010301021": "rare",
-        "010301011": "normal",
-        "010301031": "normal",
+        "010301011": "common",
+        "010301031": "common",
         "010401041": "frequent",
         "010401051": "frequent",
-        "010401061": "normal",
+        "010401061": "common",
         "050101041": "frequent",
-        "060101051": "normal"
+        "060101051": "common"
     }
 
 def cal_iou(bbox1, bbox2):
@@ -108,7 +108,11 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
     fn_r = 0
 
     nums_s = 0
-    nums_l = 0
+    nums_n = 0
+
+    nums_r = 0
+    nums_c = 0
+    nums_f = 0
 
 
     # 遍历每个图片的gt
@@ -126,24 +130,30 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
             cat_id = gt_ann['category_id']
             cat_name = coco_gt.loadCats(cat_id)[0]['name']
 
-            mode_f = cls_bins[cat_name] 
+            mode_f = cls_bins[cat_name]
+            if mode_f == 'rare':
+                nums_r += 1
+            elif mode_f == 'common':
+                nums_c += 1
+            elif mode_f == 'frequent':
+                nums_f += 1 
 
             gt = gt_ann["bbox"]
             gt_area = gt_ann["area"]
 
-            mode_s = "small" if (gt_area * 100 / img_area) <= 1 else "large" 
+            mode_s = "small" if (gt_area * 100 / img_area) <= 1 else "normal" 
             if mode_s == "small":
                 nums_s += 1
-            elif mode_s == "large":
-                nums_l += 1
+            elif mode_s == "normal":
+                nums_n += 1
 
             match = False  
 
             for dt_ann in dt_annos:
                 dt = dt_ann['bbox']
 
-                if cal_iou(dt, gt) > iou_threshold:
-                    if dt_ann['category_id'] == cat_id:
+                if dt_ann['category_id'] == cat_id:
+                    if cal_iou(dt, gt) > iou_threshold:
                         match = True
                         break
 
@@ -152,28 +162,28 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
 
                 if mode_f == 'rare':
                     tp_r += 1
-                elif mode_f == 'normal':
+                elif mode_f == 'common':
                     tp_n += 1
                 elif mode_f == 'frequent':
                     tp_f += 1
 
                 if mode_s == "small":
                     tp_s += 1
-                elif mode_s == "large":
+                elif mode_s == "normal":
                     tp_l += 1
             else:
                 fn_b[cat_name] += 1
 
                 if mode_f == 'rare':
                     fn_r += 1
-                elif mode_f == 'normal':
+                elif mode_f == 'common':
                     fn_n += 1
                 elif mode_f == 'frequent':
                     fn_f += 1
 
                 if mode_s == "small":
                     fn_s += 1
-                elif mode_s == "large":
+                elif mode_s == "normal":
                     fn_l += 1
             
         # 计算dt bbox指标
@@ -191,11 +201,10 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
                 gt = gt_ann["bbox"]
                 gt_area = gt_ann['area']
 
-                mode_s = "small" if (gt_area * 100 / img_area) <= 1 else "large" 
+                mode_s = "small" if (gt_area * 100 / img_area) <= 1 else "normal" 
 
-                if cal_iou(gt, dt) > iou_threshold:
-                    
-                    if gt_ann["category_id"] == cat_id:
+                if gt_ann['category_id'] == cat_id:
+                    if cal_iou(gt, dt) > iou_threshold:
                         match = True
                         break
 
@@ -204,14 +213,14 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
 
                 if mode_f == 'rare':
                     fp_r += 1
-                elif mode_f == 'normal':
+                elif mode_f == 'common':
                     fp_n += 1
                 elif mode_f == 'frequent':
                     fp_f += 1
 
                 if mode_s == "small":
                     fp_s += 1
-                elif mode_s == "large":
+                elif mode_s == "normal":
                     fp_l += 1
 
 
@@ -244,7 +253,7 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
             "false_detection_ratio": round(error_s, 3)
         },
         "noraml": {
-            "nums": nums_l,
+            "nums": nums_n,
             "recall": round(recall_l, 3),
             "precision": round(precision_l, 3),
             "false_detection_ratio": round(error_l, 3)
@@ -266,16 +275,19 @@ def eval(gt_file, dt_file, iou_threshold, mode="obj"):
 
     results['frequency'] = {
         "rare":{
+            "nums": nums_r,
             "recall": round(recall_r, 3),
             "precision": round(precision_r, 3),
             "false_detection_ratio": round(error_r, 3)
         },
-        "comman": {
+        "common": {
+            "nums": nums_c,
             "recall": round(recall_n, 3),
             "precision": round(precision_n, 3),
             "false_detection_ratio": round(error_n, 3)
         },
         "frequent": {
+            "nums": nums_f,
             "recall": round(recall_f, 3),
             "precision": round(precision_f, 3),
             "false_detection_ratio": round(error_f, 3)
@@ -301,7 +313,7 @@ parser.add_argument('-a', '--ann_dir',
                     default="./datasets/grid/annotations/test_annotations.json",
                     help='annotations.json file dir')
 parser.add_argument('-r', '--res_dir',
-                    default="./outputs/HR_50_2/test_results.json",
+                    default="./outputs/MS_HR/test_results.json",
                     help='results.json file dir')
 parser.add_argument('-t', '--iou_thres',
                     default=0.4,
@@ -311,7 +323,7 @@ parser.add_argument('-m', '--mode',
                     default="obj",
                     help='obj/rot/def/seg')
 parser.add_argument('-s', '--save_path',
-                    default="./outputs/HR_50_2/eval2.json",
+                    default="./outputs/MS_HR/eval3.json",
                     help='eval results save path')
 
 
