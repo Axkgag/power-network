@@ -252,8 +252,8 @@ class YoloxTrainer(AbstractObjectDetectTrainer):
                 self.model.module.head.use_l1 = True
             else:
                 self.model.head.use_l1 = True
-            if self.exp.eval_interval > 0:
-                self.exp.eval_interval = 1
+            # if self.exp.eval_interval > 0:
+            #     self.exp.eval_interval = 1
             # if not self.no_aug:
             #     self.save_ckpt(ckpt_name="last_mosaic_epoch")
 

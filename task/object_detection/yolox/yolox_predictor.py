@@ -85,9 +85,9 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
 
         return True
 
-    def loadModel(self, model_dir: str) -> bool:
+    def loadModel(self, model_dir: str, model_name="latest_ckpt.pth") -> bool:
         predictor_config_path = os.path.join(model_dir, "predictor.json")
-        ckpt = os.path.join(model_dir, "latest_ckpt.pth")
+        ckpt = os.path.join(model_dir, model_name)
         if not os.path.exists(predictor_config_path):
             return False
         with open(predictor_config_path, 'r', encoding='utf-8') as pf:
@@ -111,7 +111,7 @@ class YoloxPredictor(AbstractObjectDetectPredictor):
         self.model.eval()
 
         if self.ckpt is None:
-            ckpt_file = os.path.join(model_dir, "latest_ckpt.pth")
+            ckpt_file = os.path.join(model_dir, model_name)
         else:
             ckpt_file = self.ckpt
         logger.info("loading checkpoint")

@@ -85,7 +85,7 @@ class Exp(BaseExp):
         # name of LRScheduler
         self.scheduler = "yoloxwarmcos"
         # last #epoch to close augmention like mosaic
-        self.no_aug_epochs = 60
+        self.no_aug_epochs = 120
         # apply EMA during training
         self.ema = True
 
@@ -101,7 +101,7 @@ class Exp(BaseExp):
         self.eval_interval = 10
         # save history checkpoint or not.
         # If set to False, yolox will only save latest and best ckpt.
-        self.save_history_ckpt = False
+        self.save_history_ckpt = True
         # name of experiment
         self.exp_name = os.path.split(os.path.realpath(__file__))[1].split(".")[0]
 
@@ -215,7 +215,7 @@ class Exp(BaseExp):
                 mosaic=not no_aug,
             )
 
-        dataloader_kwargs = {"num_workers": self.data_num_workers, "pin_memory": True}
+        dataloader_kwargs = {"num_workers": self.data_num_workers, "pin_memory": False}
         dataloader_kwargs["batch_sampler"] = batch_sampler
 
         # Make sure each process has different random seed, especially for 'fork' method.
@@ -320,7 +320,7 @@ class Exp(BaseExp):
         else:
             sampler = torch.utils.data.SequentialSampler(valdataset)
 
-        dataloader_kwargs = {"num_workers": self.data_num_workers, "pin_memory": True, "sampler": sampler,
+        dataloader_kwargs = {"num_workers": self.data_num_workers, "pin_memory": False, "sampler": sampler,
                              "batch_size": batch_size}
         val_loader = torch.utils.data.DataLoader(valdataset, **dataloader_kwargs)
 

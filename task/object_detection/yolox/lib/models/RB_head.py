@@ -550,7 +550,8 @@ class RBHead(nn.Module):
         if self.use_l1:
             loss_l1 = (
                 self.l1_loss(origin_preds.view(-1, 4)[fg_masks], l1_targets)
-            ) .sum() / num_fg
+            ) * layers_weights.view(-1, 1)[fg_masks]
+            loss_l1 = loss_l1.sum() / num_fg
         else:
             loss_l1 = 0.0
 
